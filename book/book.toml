@@ -1,0 +1,18 @@
+[book]
+title = "controlledburn"
+description = "Sparse rasterization with exact coverage fractions: the representation, with real data"
+authors = ["Michael Sumner"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[rust]
+edition = "2021"
+
+[output.html]
+git-repository-url = "https://github.com/hypertidy/controlledburn-rs"
+site-url = "/controlledburn-rs/"
+default-theme = "light"
+preferred-dark-theme = "navy"

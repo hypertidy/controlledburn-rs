@@ -10,6 +10,9 @@ Pure Rust port of the C++ core of
 dependencies, no unsafe code, output bit-identical to the C++ (see
 Parity below).
 
+- API reference: [docs.rs/controlledburn](https://docs.rs/controlledburn)
+- The book, with real data: [hypertidy.github.io/controlledburn-rs](https://hypertidy.github.io/controlledburn-rs/)
+
 ```rust
 use controlledburn::{burn, BurnOptions, Coord, Geometry, GridSpec, Polygon};
 
@@ -42,6 +45,11 @@ Z/M skipped) goes through `burn_wkb`.
 
 Lines and points are unaffected by mode. `materialize` reduces a result
 into a dense `f64` buffer with fasterize-style pixel functions.
+
+## Features
+
+- `serde`: `Serialize`/`Deserialize` on the public types.
+- `geo-types`: `From`/`TryFrom` conversions from `geo_types` geometries.
 
 ## Differences from the C++ core
 

@@ -23,13 +23,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build
-        run: cargo build --all-targets
+        run: cargo build --all-targets --all-features
       - name: Test (debug)
         run: cargo test
       - name: Test (release, golden parity)
         run: cargo test --release --test golden
-      - name: Test with serde feature
-        run: cargo test --features serde
+      - name: Test with all features
+        run: cargo test --all-features
 
   # The library itself has no dependencies and builds on the declared
   # rust-version. Dev-dependencies (criterion, serde_json) and the
@@ -59,6 +59,16 @@ jobs:
       - run: cargo doc --no-deps --all-features
         env:
           RUSTDOCFLAGS: -D warnings
+
+  book:
+    name: book code blocks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install mdbook --locked --version 0.5.4
+      - run: ./book/test.sh
 
   bench-smoke:
     name: bench compiles

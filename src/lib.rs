@@ -70,6 +70,8 @@ mod coalesce;
 mod coverage;
 mod ee;
 mod error;
+#[cfg(feature = "geo-types")]
+pub mod geo;
 mod geometry;
 mod grid;
 mod line;
