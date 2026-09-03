@@ -1,0 +1,26 @@
+[package]
+name = "controlledburn"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+license = "Apache-2.0"
+description = "Sparse scanline rasterization of polygons, lines and points with exact coverage fractions. Pure Rust port of the controlledburn C++ core."
+repository = "https://github.com/hypertidy/controlledburn-rs"
+keywords = ["raster", "rasterize", "gis", "geospatial", "polygon"]
+categories = ["science::geo", "algorithms"]
+readme = "README.md"
+
+[features]
+default = []
+serde = ["dep:serde"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+
+[dev-dependencies]
+serde_json = "1"
+criterion = { version = "0.5", default-features = false }
+
+[[bench]]
+name = "burn"
+harness = false

@@ -1,0 +1,13 @@
+controlledburn (Rust)
+Copyright 2026 Michael Sumner
+
+A pure Rust port of the C++ core of controlledburn
+(https://github.com/hypertidy/controlledburn), Copyright 2025 Michael
+Sumner, Apache License 2.0.
+
+The modules under src/ee/ are derived from the exactextract library
+(https://github.com/isciences/exactextract), Copyright 2018-2022
+ISciences, LLC, Apache License 2.0: axis-aligned box side and crossing
+logic, perimeter-distance parameterisation, area measures, grid
+indexing (shrink-to-fit and cell boxes, in src/grid.rs) and the
+left-hand-area chain chasing algorithm.
