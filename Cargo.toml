@@ -9,6 +9,7 @@ repository = "https://github.com/hypertidy/controlledburn-rs"
 keywords = ["raster", "rasterize", "gis", "geospatial", "polygon"]
 categories = ["science::geo", "algorithms"]
 readme = "README.md"
+exclude = [".github/", "rustfmt.toml", ".gitignore"]
 
 [features]
 default = []
