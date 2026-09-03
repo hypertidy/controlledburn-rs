@@ -59,10 +59,30 @@ pub fn golden_result(v: &Value) -> BurnResult {
     let i = |x: &Value| x.as_i64().unwrap() as i32;
     let f = |x: &Value| x.as_f64().unwrap() as f32;
     BurnResult {
-        runs: v["runs"].as_array().unwrap().iter().map(|r| GridRun { row: i(&r[0]), col_start: i(&r[1]), col_end: i(&r[2]), id: i(&r[3]) }).collect(),
-        edges: v["edges"].as_array().unwrap().iter().map(|r| GridEdge { row: i(&r[0]), col: i(&r[1]), fraction: f(&r[2]), id: i(&r[3]) }).collect(),
-        lines: v["lines"].as_array().unwrap().iter().map(|r| GridLine { row: i(&r[0]), col: i(&r[1]), length: f(&r[2]), id: i(&r[3]) }).collect(),
-        points: v["points"].as_array().unwrap().iter().map(|r| GridPoint { row: i(&r[0]), col: i(&r[1]), id: i(&r[2]) }).collect(),
+        runs: v["runs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| GridRun { row: i(&r[0]), col_start: i(&r[1]), col_end: i(&r[2]), id: i(&r[3]) })
+            .collect(),
+        edges: v["edges"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| GridEdge { row: i(&r[0]), col: i(&r[1]), fraction: f(&r[2]), id: i(&r[3]) })
+            .collect(),
+        lines: v["lines"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| GridLine { row: i(&r[0]), col: i(&r[1]), length: f(&r[2]), id: i(&r[3]) })
+            .collect(),
+        points: v["points"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| GridPoint { row: i(&r[0]), col: i(&r[1]), id: i(&r[2]) })
+            .collect(),
         notes: Vec::new(),
     }
 }

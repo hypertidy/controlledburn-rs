@@ -57,9 +57,7 @@ impl GridSpec {
             return Err(BurnError::InvalidGrid("extent must be finite".into()));
         }
         if self.xmax <= self.xmin || self.ymax <= self.ymin {
-            return Err(BurnError::InvalidGrid(
-                "invalid extent: xmax must be > xmin, ymax must be > ymin".into(),
-            ));
+            return Err(BurnError::InvalidGrid("invalid extent: xmax must be > xmin, ymax must be > ymin".into()));
         }
         Ok(())
     }
@@ -82,23 +80,9 @@ pub(crate) struct Grid<const PAD: usize> {
 
 impl<const PAD: usize> Grid<PAD> {
     pub fn new(extent: BBox, dx: f64, dy: f64) -> Self {
-        let rows = if extent.ymax > extent.ymin {
-            ((extent.ymax - extent.ymin) / dy).round() as usize
-        } else {
-            0
-        };
-        let cols = if extent.xmax > extent.xmin {
-            ((extent.xmax - extent.xmin) / dx).round() as usize
-        } else {
-            0
-        };
-        Grid {
-            extent,
-            dx,
-            dy,
-            num_rows: 2 * PAD + rows,
-            num_cols: 2 * PAD + cols,
-        }
+        let rows = if extent.ymax > extent.ymin { ((extent.ymax - extent.ymin) / dy).round() as usize } else { 0 };
+        let cols = if extent.xmax > extent.xmin { ((extent.xmax - extent.xmin) / dx).round() as usize } else { 0 };
+        Grid { extent, dx, dy, num_rows: 2 * PAD + rows, num_cols: 2 * PAD + cols }
     }
 
     /// Column index for `x`. For the padded grid, values outside the extent
@@ -249,18 +233,14 @@ impl<const PAD: usize> Grid<PAD> {
         // Fudge the computed xmax and ymin, if needed, so the extent does
         // not grow during a shrink.
         if reduced.xmax > e.xmax {
-            if ((reduced.xmax - reduced.xmin) / self.dx).round()
-                == ((e.xmax - reduced.xmin) / self.dx).round()
-            {
+            if ((reduced.xmax - reduced.xmin) / self.dx).round() == ((e.xmax - reduced.xmin) / self.dx).round() {
                 reduced.xmax = e.xmax;
             } else {
                 return Err("Shrink operation failed.".into());
             }
         }
         if reduced.ymin < e.ymin {
-            if ((reduced.ymax - reduced.ymin) / self.dy).round()
-                == ((reduced.ymax - e.ymin) / self.dy).round()
-            {
+            if ((reduced.ymax - reduced.ymin) / self.dy).round() == ((reduced.ymax - e.ymin) / self.dy).round() {
                 reduced.ymin = e.ymin;
             } else {
                 return Err("Shrink operation failed.".into());

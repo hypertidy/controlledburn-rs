@@ -111,7 +111,12 @@ pub(crate) fn process_polygon_approx(poly: &Polygon, gs: &GridSpec, poly_id: i32
                     // Leaving before the cell centre: close the run before this cell.
                     let col_end = col; // 0-based exclusive
                     if run_start >= 0 && run_start < col_end {
-                        runs.push(GridRun { row: out_row, col_start: (run_start + 1) as i32, col_end: col_end as i32, id: poly_id });
+                        runs.push(GridRun {
+                            row: out_row,
+                            col_start: (run_start + 1) as i32,
+                            col_end: col_end as i32,
+                            id: poly_id,
+                        });
                     }
                     run_start = -1;
                 } else if winding == 0 && new_winding != 0 {
@@ -125,7 +130,12 @@ pub(crate) fn process_polygon_approx(poly: &Polygon, gs: &GridSpec, poly_id: i32
                 }
                 let col_end_1 = (col + 1).min(ncol);
                 if run_start < col_end_1 {
-                    runs.push(GridRun { row: out_row, col_start: (run_start + 1) as i32, col_end: col_end_1 as i32, id: poly_id });
+                    runs.push(GridRun {
+                        row: out_row,
+                        col_start: (run_start + 1) as i32,
+                        col_end: col_end_1 as i32,
+                        id: poly_id,
+                    });
                 }
                 run_start = -1;
             } else if winding == 0 && new_winding != 0 {

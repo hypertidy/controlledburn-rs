@@ -76,10 +76,7 @@ pub struct BurnResult {
 impl BurnResult {
     /// Total number of cells covered by `runs` (sum of run lengths).
     pub fn run_cells(&self) -> u64 {
-        self.runs
-            .iter()
-            .map(|r| (r.col_end - r.col_start + 1) as u64)
-            .sum()
+        self.runs.iter().map(|r| (r.col_end - r.col_start + 1) as u64).sum()
     }
 
     /// Sum of run cells plus edge fractions: the covered area in cell units.
@@ -97,9 +94,6 @@ impl BurnResult {
     }
 
     pub(crate) fn note(&mut self, geom_index: usize, message: impl Into<String>) {
-        self.notes.push(Note {
-            geom_index: geom_index as i32,
-            message: message.into(),
-        });
+        self.notes.push(Note { geom_index: geom_index as i32, message: message.into() });
     }
 }

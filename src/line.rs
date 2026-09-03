@@ -9,7 +9,12 @@ use crate::walker::walk_polyline;
 /// lines have a degenerate envelope, and the walker's cost is O(cells
 /// touched) regardless of grid size) and emit one record per in-grid
 /// cell with the summed segment length of every traversal through it.
-pub(crate) fn process_line(line: &[Coord], full_grid: &Grid<0>, line_id: i32, out: &mut Vec<GridLine>) -> Result<(), String> {
+pub(crate) fn process_line(
+    line: &[Coord],
+    full_grid: &Grid<0>,
+    line_id: i32,
+    out: &mut Vec<GridLine>,
+) -> Result<(), String> {
     if line.len() < 2 {
         return Ok(());
     }

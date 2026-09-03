@@ -48,10 +48,9 @@ fn triangle_on_awkward_grid() {
 #[test]
 fn holes_either_orientation() {
     let g = GridSpec::new(0., 0., 10., 10., 20, 20);
-    for hole in [
-        vec![(3., 3.), (7., 3.), (7., 7.), (3., 7.), (3., 3.)],
-        vec![(3., 3.), (3., 7.), (7., 7.), (7., 3.), (3., 3.)],
-    ] {
+    for hole in
+        [vec![(3., 3.), (7., 3.), (7., 7.), (3., 7.), (3., 3.)], vec![(3., 3.), (3., 7.), (7., 7.), (7., 3.), (3., 3.)]]
+    {
         let p = poly(vec![vec![(1., 1.), (9., 1.), (9., 9.), (1., 9.), (1., 1.)], hole]);
         let r = burn(&[p], &g, BurnOptions::default()).unwrap();
         assert!(near(area(&r, &g), 48.0, 1e-6));
@@ -60,8 +59,14 @@ fn holes_either_orientation() {
 
 #[test]
 fn multipolygon_components_independent() {
-    let a = Polygon::new(vec![vec![(1., 1.), (3., 1.), (3., 3.), (1., 3.), (1., 1.)].into_iter().map(Coord::from).collect()]);
-    let b = Polygon::new(vec![vec![(5.5, 5.5), (8.5, 5.5), (8.5, 8.5), (5.5, 8.5), (5.5, 5.5)].into_iter().map(Coord::from).collect()]);
+    let a = Polygon::new(vec![vec![(1., 1.), (3., 1.), (3., 3.), (1., 3.), (1., 1.)]
+        .into_iter()
+        .map(Coord::from)
+        .collect()]);
+    let b = Polygon::new(vec![vec![(5.5, 5.5), (8.5, 5.5), (8.5, 8.5), (5.5, 8.5), (5.5, 5.5)]
+        .into_iter()
+        .map(Coord::from)
+        .collect()]);
     let r = burn(&[Geometry::MultiPolygon(vec![a, b])], &G10, BurnOptions::default()).unwrap();
     assert!(near(area(&r, &G10), 13.0, 1e-6));
     assert!(r.runs.iter().chain(std::iter::empty()).all(|x| x.id == 1));

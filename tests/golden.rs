@@ -13,12 +13,24 @@ fn assert_tables_equal(case: &str, mode: &str, got: &BurnResult, want: &BurnResu
     assert_eq!(got.edges.len(), want.edges.len(), "{case} [{mode}] edge count differs");
     for (i, (g, w)) in got.edges.iter().zip(&want.edges).enumerate() {
         assert_eq!((g.row, g.col, g.id), (w.row, w.col, w.id), "{case} [{mode}] edge {i} position differs");
-        assert_eq!(g.fraction.to_bits(), w.fraction.to_bits(), "{case} [{mode}] edge {i} fraction differs: {} vs {}", g.fraction, w.fraction);
+        assert_eq!(
+            g.fraction.to_bits(),
+            w.fraction.to_bits(),
+            "{case} [{mode}] edge {i} fraction differs: {} vs {}",
+            g.fraction,
+            w.fraction
+        );
     }
     assert_eq!(got.lines.len(), want.lines.len(), "{case} [{mode}] line count differs");
     for (i, (g, w)) in got.lines.iter().zip(&want.lines).enumerate() {
         assert_eq!((g.row, g.col, g.id), (w.row, w.col, w.id), "{case} [{mode}] line {i} position differs");
-        assert_eq!(g.length.to_bits(), w.length.to_bits(), "{case} [{mode}] line {i} length differs: {} vs {}", g.length, w.length);
+        assert_eq!(
+            g.length.to_bits(),
+            w.length.to_bits(),
+            "{case} [{mode}] line {i} length differs: {} vs {}",
+            g.length,
+            w.length
+        );
     }
     assert_eq!(got.points, want.points, "{case} [{mode}] points differ");
     assert!(got.notes.is_empty(), "{case} [{mode}] unexpected notes: {:?}", got.notes);

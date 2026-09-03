@@ -168,7 +168,8 @@ mod tests {
 
     #[test]
     fn shoelace_sign() {
-        let ccw = vec![Coord::new(0., 0.), Coord::new(1., 0.), Coord::new(1., 1.), Coord::new(0., 1.), Coord::new(0., 0.)];
+        let ccw =
+            vec![Coord::new(0., 0.), Coord::new(1., 0.), Coord::new(1., 1.), Coord::new(0., 1.), Coord::new(0., 0.)];
         assert_eq!(signed_area(&ccw), 1.0);
         let mut cw = ccw.clone();
         cw.reverse();

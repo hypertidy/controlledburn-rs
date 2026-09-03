@@ -29,10 +29,7 @@ fn read_csv(name: &str) -> Vec<HashMap<String, String>> {
     let text = std::fs::read_to_string(fixtures_dir().join(name)).unwrap();
     let mut lines = text.lines();
     let header = split_csv(lines.next().unwrap());
-    lines
-        .filter(|l| !l.trim().is_empty())
-        .map(|l| header.iter().cloned().zip(split_csv(l)).collect())
-        .collect()
+    lines.filter(|l| !l.trim().is_empty()).map(|l| header.iter().cloned().zip(split_csv(l)).collect()).collect()
 }
 
 #[test]

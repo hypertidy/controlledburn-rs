@@ -112,7 +112,14 @@ fn normalize(g: &Geometry) -> Cow<'_, Geometry> {
     })
 }
 
-fn process_geometry(g: &Geometry, full_grid: &Grid<0>, gs: &GridSpec, geom_id: i32, out: &mut BurnResult, opts: &BurnOptions) -> Result<(), String> {
+fn process_geometry(
+    g: &Geometry,
+    full_grid: &Grid<0>,
+    gs: &GridSpec,
+    geom_id: i32,
+    out: &mut BurnResult,
+    opts: &BurnOptions,
+) -> Result<(), String> {
     let run_start = out.runs.len();
     for poly in g.polygons() {
         match opts.mode {
