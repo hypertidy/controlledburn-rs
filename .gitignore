@@ -1,3 +1,10 @@
 /target
 Cargo.lock
 /book/book
+
+# RStudio / Posit editor artifacts
+.Rproj.user/
+*.Rproj
+.Rhistory
+.RData
+.posit/
