@@ -55,15 +55,20 @@ pub fn golden_grid(v: &Value) -> GridSpec {
     )
 }
 
+/// The C++ tables from the golden file, converted to this crate's
+/// convention: the C++ emits 1-based row/col, inclusive `col_end` and
+/// `id = k + 1`; this crate emits 0-based row/col, exclusive `col_end`
+/// and `id = k`. So row, col, col_start and id lose 1 and col_end is
+/// unchanged. Fractions and lengths are untouched.
 pub fn golden_result(v: &Value) -> BurnResult {
-    let i = |x: &Value| x.as_i64().unwrap() as i32;
+    let i = |x: &Value| x.as_i64().unwrap() as i32 - 1;
     let f = |x: &Value| x.as_f64().unwrap() as f32;
     BurnResult {
         runs: v["runs"]
             .as_array()
             .unwrap()
             .iter()
-            .map(|r| GridRun { row: i(&r[0]), col_start: i(&r[1]), col_end: i(&r[2]), id: i(&r[3]) })
+            .map(|r| GridRun { row: i(&r[0]), col_start: i(&r[1]), col_end: i(&r[2]) + 1, id: i(&r[3]) })
             .collect(),
         edges: v["edges"]
             .as_array()

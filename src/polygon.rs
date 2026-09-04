@@ -242,7 +242,7 @@ pub(crate) fn process_polygon(
 
         let mut winding: i32 = 0;
         let mut prev_col: i64 = -2;
-        let full_row = (row_off + sr) as i32 + 1;
+        let full_row = (row_off + sr) as i32;
 
         for mc in &merged {
             // Interior run between the previous boundary cell and this one.
@@ -250,18 +250,18 @@ pub(crate) fn process_polygon(
             if winding != 0 && prev_col > -2 && mc.col > prev_col + 1 {
                 runs.push(GridRun {
                     row: full_row,
-                    col_start: (prev_col + 1 + 1) as i32,
-                    col_end: (mc.col - 1 + 1) as i32,
+                    col_start: (prev_col + 1) as i32,
+                    col_end: mc.col as i32,
                     id: poly_id,
                 });
             }
 
             let w = mc.coverage;
             if w > tol && w < one_minus_tol {
-                edges.push(GridEdge { row: full_row, col: (mc.col + 1) as i32, fraction: w, id: poly_id });
+                edges.push(GridEdge { row: full_row, col: mc.col as i32, fraction: w, id: poly_id });
             } else if w >= one_minus_tol {
-                let c = (mc.col + 1) as i32;
-                runs.push(GridRun { row: full_row, col_start: c, col_end: c, id: poly_id });
+                let c = mc.col as i32;
+                runs.push(GridRun { row: full_row, col_start: c, col_end: c + 1, id: poly_id });
             }
 
             winding += mc.winding_delta;

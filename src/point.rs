@@ -17,5 +17,5 @@ pub(crate) fn process_point(pt: &Coord, full_grid: &Grid<0>, point_id: i32, out:
     }
     let r = full_grid.get_row(pt.y);
     let c = full_grid.get_column(pt.x);
-    out.push(GridPoint { row: r as i32 + 1, col: c as i32 + 1, id: point_id });
+    out.push(GridPoint { row: r as i32, col: c as i32, id: point_id });
 }

@@ -20,12 +20,12 @@ use controlledburn::GridSpec;
 
 let grid = GridSpec::new(-180.0, -90.0, 180.0, 90.0, 3600, 1800);
 
-// Row 1 is the top row, so its centre is at ymax - dy / 2.
+// Row 0 is the top row, so its centre is at ymax - dy / 2.
 fn value(grid: &GridSpec, row: i32, _col: i32) -> f64 {
-    grid.ymax - (row as f64 - 0.5) * grid.dy()
+    grid.ymax - (row as f64 + 0.5) * grid.dy()
 }
-assert!((value(&grid, 1, 1) - 89.95).abs() < 1e-9);
-assert!((value(&grid, 1800, 1) + 89.95).abs() < 1e-9);
+assert!((value(&grid, 0, 0) - 89.95).abs() < 1e-9);
+assert!((value(&grid, 1799, 0) + 89.95).abs() < 1e-9);
 ```
 
 ## Area-weighted mean per zone
@@ -42,20 +42,20 @@ use controlledburn::{burn_wkb, BurnOptions, BurnResult, GridSpec};
 # fn split_blobs(bytes: &[u8]) -> Vec<&[u8]> { let n = u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize; let mut pos = 4; let mut out = Vec::with_capacity(n); for _ in 0..n { let len = u32::from_le_bytes(bytes[pos..pos + 4].try_into().unwrap()) as usize; pos += 4; out.push(&bytes[pos..pos + len]); pos += len; } out }
 # let countries = split_blobs(&bytes);
 # let grid = GridSpec::new(-180.0, -90.0, 180.0, 90.0, 3600, 1800);
-# fn value(grid: &GridSpec, row: i32, _col: i32) -> f64 { grid.ymax - (row as f64 - 0.5) * grid.dy() }
+# fn value(grid: &GridSpec, row: i32, _col: i32) -> f64 { grid.ymax - (row as f64 + 0.5) * grid.dy() }
 
 fn weighted_mean(r: &BurnResult, n_zones: usize, grid: &GridSpec, value: impl Fn(&GridSpec, i32, i32) -> f64) -> Vec<f64> {
     let mut sum_wv = vec![0.0f64; n_zones];
     let mut sum_w = vec![0.0f64; n_zones];
     for run in &r.runs {
-        let k = (run.id - 1) as usize;
-        for col in run.col_start..=run.col_end {
+        let k = run.id as usize;
+        for col in run.col_start..run.col_end {
             sum_wv[k] += value(grid, run.row, col);
             sum_w[k] += 1.0;
         }
     }
     for e in &r.edges {
-        let k = (e.id - 1) as usize;
+        let k = e.id as usize;
         let w = e.fraction as f64;
         sum_wv[k] += w * value(grid, e.row, e.col);
         sum_w[k] += w;
@@ -67,17 +67,17 @@ let r = burn_wkb(countries.iter().copied(), &grid, BurnOptions::default()).unwra
 let mean_lat = weighted_mean(&r, countries.len(), &grid, value);
 
 // data/ne_110m_countries.csv maps id to name; a few known ids:
-let (australia, chile, iceland) = (138, 11, 145);
-# // the CSV has a header line, so line `id` is the row for that id
+let (australia, chile, iceland) = (137, 10, 144);
+# // the CSV has a header line, so line `id + 1` is the row for that id
 # let names = std::fs::read_to_string(format!("{data_dir}/ne_110m_countries.csv")).unwrap();
-# let name_of = |id: usize| names.lines().nth(id).unwrap().split(',').nth(1).unwrap().trim_matches('"').to_string();
+# let name_of = |id: usize| names.lines().nth(id + 1).unwrap().split(',').nth(1).unwrap().trim_matches('"').to_string();
 # assert_eq!(name_of(australia), "Australia");
 # assert_eq!(name_of(chile), "Chile");
 # assert_eq!(name_of(iceland), "Iceland");
-println!("Australia {:.2}  Chile {:.2}  Iceland {:.2}", mean_lat[australia - 1], mean_lat[chile - 1], mean_lat[iceland - 1]);
-# assert!((mean_lat[australia - 1] - -25.7).abs() < 0.5, "{}", mean_lat[australia - 1]);
-# assert!((mean_lat[chile - 1] - -39.0).abs() < 0.5, "{}", mean_lat[chile - 1]);
-# assert!((mean_lat[iceland - 1] - 65.0).abs() < 0.5, "{}", mean_lat[iceland - 1]);
+println!("Australia {:.2}  Chile {:.2}  Iceland {:.2}", mean_lat[australia], mean_lat[chile], mean_lat[iceland]);
+# assert!((mean_lat[australia] - -25.7).abs() < 0.5, "{}", mean_lat[australia]);
+# assert!((mean_lat[chile] - -39.0).abs() < 0.5, "{}", mean_lat[chile]);
+# assert!((mean_lat[iceland] - 65.0).abs() < 0.5, "{}", mean_lat[iceland]);
 ```
 
 Australia's area-weighted mean latitude comes out near -25.7, Chile's

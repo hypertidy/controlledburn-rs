@@ -14,12 +14,13 @@
 //! Input: geometries ([`Geometry`]), a grid ([`GridSpec`]: extent plus
 //! column/row counts, row 1 at the top) and [`BurnOptions`].
 //!
-//! Output ([`BurnResult`]), four typed tables with 1-based indices.
-//! Geometry `k` (0-based input position) gets id `k + 1`:
+//! Output ([`BurnResult`]), four typed tables with 0-based indices (row 0
+//! at the top) and half-open run ranges. Geometry `k` in the input slice
+//! has `id = k`:
 //!
 //! | table    | columns                          | meaning                                  |
 //! |----------|----------------------------------|------------------------------------------|
-//! | `runs`   | row, col_start, col_end, id      | fully covered polygon cells (inclusive)  |
+//! | `runs`   | row, col_start, col_end, id      | fully covered cells `col_start..col_end` |
 //! | `edges`  | row, col, fraction (f32), id     | polygon boundary cells, fraction in (0,1)|
 //! | `lines`  | row, col, length (f32), id       | line length inside the cell, CRS units   |
 //! | `points` | row, col, id                     | one record per point inside the grid     |
@@ -60,6 +61,10 @@
 //!   that off for record-for-record equality with the C++ tables.
 //! * Sorts are stable, so ties among equal-x intercepts in Approx mode
 //!   are deterministic.
+//! * Indices are 0-based with half-open run ranges and `id = k`; the C++
+//!   core (and its R and Python bindings) emit 1-based indices, inclusive
+//!   `col_end` and `id = k + 1`. `BurnOptions::parity` does not change
+//!   this; the golden tests apply the offset when comparing.
 
 #![forbid(unsafe_code)]
 #![warn(missing_debug_implementations)]

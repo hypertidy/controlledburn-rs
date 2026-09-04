@@ -1,7 +1,7 @@
 //! Optional consumer: burn a sparse `BurnResult` into a caller-provided
 //! pixel buffer with per-pixel reduction functions (fasterize semantics).
 //!
-//! The buffer is row-major, row 1 (top) first, `ncol * nrow` values,
+//! The buffer is row-major, row 0 (top) first, `ncol * nrow` values,
 //! caller-initialised (conventionally to NaN as the background). Cells
 //! never touched are left untouched.
 //!
@@ -86,7 +86,7 @@ fn apply(px: &mut f64, value: f64, f: PixelFn) {
 /// Materialize polygon output (runs + edges) into `buffer`.
 ///
 /// `values` maps geometry id to burn value: the value for id `k` is
-/// `values[k - 1]`. Pass `None` to burn the id itself.
+/// `values[k]`. Pass `None` to burn the id itself.
 pub fn materialize(
     result: &BurnResult,
     buffer: &mut [f64],
@@ -111,28 +111,25 @@ pub fn materialize(
     let value_of = |id: i32| -> Result<f64, BurnError> {
         match values {
             None => Ok(id as f64),
-            Some(v) => {
-                let i = (id as i64 - 1) as usize;
-                v.get(i).copied().ok_or(BurnError::IdOutOfRange { id, values: v.len() })
-            }
+            Some(v) => v.get(id as usize).copied().ok_or(BurnError::IdOutOfRange { id, values: v.len() }),
         }
     };
-    let idx = |row: i32, col: i32| -> usize { (row as usize - 1) * ncol as usize + (col as usize - 1) };
+    let idx = |row: i32, col: i32| -> usize { row as usize * ncol as usize + col as usize };
 
     for r in &result.runs {
-        if r.row < 1 || r.row > nrow_i {
+        if r.row < 0 || r.row >= nrow_i {
             continue;
         }
-        let c0 = r.col_start.max(1);
+        let c0 = r.col_start.max(0);
         let c1 = r.col_end.min(ncol_i);
         let v = value_of(r.id)?;
-        for c in c0..=c1 {
+        for c in c0..c1 {
             apply(&mut buffer[idx(r.row, c)], v, opts.fn_);
         }
     }
 
     for e in &result.edges {
-        if e.row < 1 || e.row > nrow_i || e.col < 1 || e.col > ncol_i {
+        if e.row < 0 || e.row >= nrow_i || e.col < 0 || e.col >= ncol_i {
             continue;
         }
         let v = value_of(e.id)?;

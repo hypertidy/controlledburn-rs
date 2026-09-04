@@ -146,17 +146,17 @@ fn burn_one(g: &Geometry, k: usize, full_grid: &Grid<0>, gs: &GridSpec, out: &mu
         return;
     }
     if !g.is_finite() {
-        out.note(k + 1, "skipped geometry with non-finite coordinates");
+        out.note(k, "skipped geometry with non-finite coordinates");
         return;
     }
     let g = normalize(g);
-    if let Err(e) = process_geometry(&g, full_grid, gs, (k + 1) as i32, out, opts) {
-        out.note(k + 1, format!("error processing geometry: {e}"));
+    if let Err(e) = process_geometry(&g, full_grid, gs, k as i32, out, opts) {
+        out.note(k, format!("error processing geometry: {e}"));
     }
 }
 
-/// Burn a set of geometries onto the grid. Geometry `k` (0-based) is
-/// assigned id `k + 1` in the output tables.
+/// Burn a set of geometries onto the grid. Geometry `k` (its 0-based
+/// position in `geoms`) is `id = k` in the output tables.
 ///
 /// Empty geometries are skipped silently; geometries with non-finite
 /// coordinates and geometries the engine cannot process are skipped with
@@ -190,7 +190,7 @@ where
         }
         match parse_wkb(blob) {
             Ok(g) => burn_one(&g, k, &full_grid, grid, &mut out, &opts),
-            Err(e) => out.note(k + 1, format!("failed to parse WKB: {e}")),
+            Err(e) => out.note(k, format!("failed to parse WKB: {e}")),
         }
     }
     Ok(out)

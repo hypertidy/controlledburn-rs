@@ -4,11 +4,14 @@
 //! Line    -> `lines` (length in cell, CRS units).
 //! Point   -> `points` (no measure column; implicit 1).
 //!
-//! All row/col indices are 1-based and row 1 is the top row. Schemas are
+//! Row and column indices are 0-based and row 0 is the top row; a run's
+//! `col_end` is exclusive, so `col_end - col_start` is its length and
+//! `buf[col_start..col_end]` is its slice. Schemas are
 //! type-pure: each table's measure column (or absence thereof) means
 //! exactly one thing.
 
-/// A single interior run: fully covered cells `[col_start, col_end]` on `row`.
+/// A single interior run: fully covered cells `col_start..col_end`
+/// (half-open) on `row`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -54,7 +57,7 @@ pub struct GridPoint {
 }
 
 /// A non-fatal problem encountered for one input geometry.
-/// `geom_index` is the 1-based position in the input.
+/// `geom_index` is the 0-based position in the input (the same as `id`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Note {
@@ -76,7 +79,7 @@ pub struct BurnResult {
 impl BurnResult {
     /// Total number of cells covered by `runs` (sum of run lengths).
     pub fn run_cells(&self) -> u64 {
-        self.runs.iter().map(|r| (r.col_end - r.col_start + 1) as u64).sum()
+        self.runs.iter().map(|r| (r.col_end - r.col_start) as u64).sum()
     }
 
     /// Sum of run cells plus edge fractions: the covered area in cell units.

@@ -17,7 +17,7 @@ pub(crate) fn coalesce_sorted(runs: &mut Vec<GridRun>) {
         let cur = runs[i];
         if w > 0 {
             let last = &mut runs[w - 1];
-            if last.id == cur.id && last.row == cur.row && cur.col_start <= last.col_end + 1 {
+            if last.id == cur.id && last.row == cur.row && cur.col_start <= last.col_end {
                 if cur.col_end > last.col_end {
                     last.col_end = cur.col_end;
                 }
@@ -47,8 +47,8 @@ mod tests {
 
     #[test]
     fn merges_neighbours_only() {
-        let mut v = vec![r(1, 3, 3, 1), r(1, 4, 4, 1), r(1, 5, 5, 1), r(1, 7, 9, 1), r(2, 1, 1, 1), r(1, 6, 6, 2)];
+        let mut v = vec![r(1, 3, 4, 1), r(1, 4, 5, 1), r(1, 5, 6, 1), r(1, 7, 10, 1), r(2, 1, 2, 1), r(1, 6, 7, 2)];
         coalesce_runs(&mut v);
-        assert_eq!(v, vec![r(1, 3, 5, 1), r(1, 7, 9, 1), r(2, 1, 1, 1), r(1, 6, 6, 2)]);
+        assert_eq!(v, vec![r(1, 3, 6, 1), r(1, 7, 10, 1), r(2, 1, 2, 1), r(1, 6, 7, 2)]);
     }
 }

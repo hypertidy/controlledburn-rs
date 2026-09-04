@@ -23,7 +23,7 @@ let square = Geometry::Polygon(Polygon::new(vec![vec![
 let grid = GridSpec::new(0.0, 0.0, 10.0, 10.0, 10, 10); // extent, ncol, nrow
 let r = burn(&[square], &grid, BurnOptions::default()).unwrap();
 
-// r.runs   interior cells:      (row, col_start, col_end, id)
+// r.runs   interior cells:      (row, col_start, col_end, id), col_start..col_end
 // r.edges  boundary cells:      (row, col, fraction, id), fraction in (0, 1)
 // r.lines  line cells:          (row, col, length, id), CRS units
 // r.points point cells:         (row, col, id)
@@ -31,9 +31,9 @@ let r = burn(&[square], &grid, BurnOptions::default()).unwrap();
 assert!((r.covered_cells() * grid.dx() * grid.dy() - 16.0).abs() < 1e-5);
 ```
 
-Indices are 1-based, row 1 is the top row, geometry `k` (0-based input
-position) gets id `k + 1`. WKB input (ISO and EWKB, both byte orders,
-Z/M skipped) goes through `burn_wkb`.
+Indices are 0-based with row 0 at the top, run ranges are half-open,
+and geometry `k` in the input has `id = k`. WKB input (ISO and EWKB,
+both byte orders, Z/M skipped) goes through `burn_wkb`.
 
 ## Modes
 
@@ -59,6 +59,9 @@ into a dense `f64` buffer with fasterize-style pixel functions.
 - Adjacent runs on a row are coalesced by default;
   `BurnOptions::parity(mode)` turns that off for record-for-record
   equality with the C++ tables.
+- Indices are 0-based, run ranges half-open and `id = k`; the C++ core
+  and its R and Python bindings emit 1-based indices, inclusive `col_end`
+  and `id = k + 1`. The golden tests apply that offset when comparing.
 - Sorts are stable, so ties among equal-x intercepts in Approx mode are
   deterministic.
 

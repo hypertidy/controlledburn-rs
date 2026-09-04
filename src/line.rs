@@ -48,9 +48,8 @@ pub(crate) fn process_line(
             }
         }
         if total_length > 0.0 {
-            // Padded (r, c) map to 1-based bounded indices directly:
-            // padding = 1 absorbs the +1.
-            out.push(GridLine { row: r as i32, col: c as i32, length: total_length as f32, id: line_id });
+            // Strip the padding ring to get 0-based grid indices.
+            out.push(GridLine { row: (r - 1) as i32, col: (c - 1) as i32, length: total_length as f32, id: line_id });
         }
     }
     // Row-major record order, as the C++ (which iterates an ordered map).

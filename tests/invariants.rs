@@ -69,7 +69,7 @@ fn multipolygon_components_independent() {
         .collect()]);
     let r = burn(&[Geometry::MultiPolygon(vec![a, b])], &G10, BurnOptions::default()).unwrap();
     assert!(near(area(&r, &G10), 13.0, 1e-6));
-    assert!(r.runs.iter().chain(std::iter::empty()).all(|x| x.id == 1));
+    assert!(r.runs.iter().all(|x| x.id == 0));
 }
 
 #[test]
@@ -111,7 +111,7 @@ fn points_bin_and_drop() {
     assert_eq!(r.notes.len(), 1);
     let p = Geometry::MultiPoint(vec![Coord::new(0.5, 9.5), Coord::new(10.0, 0.0), Coord::new(10.5, 5.0)]);
     let r = burn(&[p], &G10, BurnOptions::default()).unwrap();
-    assert_eq!(r.points, vec![GridPoint { row: 1, col: 1, id: 1 }, GridPoint { row: 10, col: 10, id: 1 }]);
+    assert_eq!(r.points, vec![GridPoint { row: 0, col: 0, id: 0 }, GridPoint { row: 9, col: 9, id: 0 }]);
 }
 
 #[test]
@@ -123,8 +123,8 @@ fn ids_follow_input_position_and_empty_skipped() {
         Geometry::Point(Coord::new(5.5, 5.5)),
     ];
     let r = burn(&geoms, &G10, BurnOptions::default()).unwrap();
-    assert!(r.runs.iter().all(|x| x.id == 2));
-    assert_eq!(r.points[0].id, 4);
+    assert!(r.runs.iter().all(|x| x.id == 1));
+    assert_eq!(r.points[0].id, 3);
     assert!(r.notes.is_empty());
 }
 
@@ -137,9 +137,9 @@ fn wkb_roundtrip_and_malformed() {
     let r = burn_wkb([good.as_slice(), bad, &coll, &[]], &G10, BurnOptions::default()).unwrap();
     assert_eq!(area(&r, &G10), 16.0);
     assert_eq!(r.notes.len(), 2);
-    assert_eq!(r.notes[0].geom_index, 2);
+    assert_eq!(r.notes[0].geom_index, 1);
     assert!(r.notes[0].message.starts_with("failed to parse WKB: WKB truncated at byte"));
-    assert_eq!(r.notes[1].geom_index, 3);
+    assert_eq!(r.notes[1].geom_index, 2);
     assert!(r.notes[1].message.contains("GeometryCollection"));
 }
 
@@ -152,7 +152,7 @@ fn materialize_policies() {
     // Threshold 0.5: interior 3x3 plus the 12 side cells at 0.5; the 4
     // corner cells at 0.25 are excluded.
     assert_eq!(touched, 21);
-    assert!(buf.iter().filter(|v| !v.is_nan()).all(|v| *v == 1.0));
+    assert!(buf.iter().filter(|v| !v.is_nan()).all(|v| *v == 0.0), "burned value is the id, 0");
 
     let mut buf = vec![f64::NAN; 100];
     let opts = MaterializeOptions { fn_: PixelFn::Sum, edge_policy: EdgePolicy::Fraction, threshold: 0.5 };
@@ -163,7 +163,7 @@ fn materialize_policies() {
     assert!(materialize(&r, &mut buf, 10, 9, None, &MaterializeOptions::default()).is_err());
     assert_eq!(
         materialize(&r, &mut buf, 10, 10, Some(&[]), &MaterializeOptions::default()).unwrap_err(),
-        BurnError::IdOutOfRange { id: 1, values: 0 }
+        BurnError::IdOutOfRange { id: 0, values: 0 }
     );
 }
 
@@ -192,8 +192,8 @@ fn non_finite_polygon_is_skipped_not_hung() {
     let inf = poly(vec![vec![(2., 2.), (f64::INFINITY, 2.), (5., 5.), (2., 5.), (2., 2.)]]);
     let r = burn(&[nan, inf, square(1., 1., 2., 2.)], &G10, BurnOptions::default()).unwrap();
     assert_eq!(r.notes.len(), 2);
-    assert_eq!((r.notes[0].geom_index, r.notes[1].geom_index), (1, 2));
-    assert!(r.runs.iter().all(|x| x.id == 3));
+    assert_eq!((r.notes[0].geom_index, r.notes[1].geom_index), (0, 1));
+    assert!(r.runs.iter().all(|x| x.id == 2));
 }
 
 #[test]

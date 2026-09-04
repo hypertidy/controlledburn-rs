@@ -92,7 +92,7 @@ pub(crate) fn process_polygon_approx(poly: &Polygon, gs: &GridSpec, poly_id: i32
 
         let mut winding: i32 = 0;
         let mut run_start: i64 = -1;
-        let out_row = (r + 1) as i32;
+        let out_row = r as i32;
 
         for ix in intercepts.iter() {
             let mut col = ((ix.x - gs.xmin) / dx).floor() as i64;
@@ -109,11 +109,11 @@ pub(crate) fn process_polygon_approx(poly: &Polygon, gs: &GridSpec, poly_id: i32
             if left_of_center {
                 if winding != 0 && new_winding == 0 {
                     // Leaving before the cell centre: close the run before this cell.
-                    let col_end = col; // 0-based exclusive
+                    let col_end = col; // exclusive
                     if run_start >= 0 && run_start < col_end {
                         runs.push(GridRun {
                             row: out_row,
-                            col_start: (run_start + 1) as i32,
+                            col_start: run_start as i32,
                             col_end: col_end as i32,
                             id: poly_id,
                         });
@@ -132,7 +132,7 @@ pub(crate) fn process_polygon_approx(poly: &Polygon, gs: &GridSpec, poly_id: i32
                 if run_start < col_end_1 {
                     runs.push(GridRun {
                         row: out_row,
-                        col_start: (run_start + 1) as i32,
+                        col_start: run_start as i32,
                         col_end: col_end_1 as i32,
                         id: poly_id,
                     });
@@ -147,7 +147,7 @@ pub(crate) fn process_polygon_approx(poly: &Polygon, gs: &GridSpec, poly_id: i32
 
         // Polygon extends beyond the grid's right edge.
         if winding != 0 && run_start >= 0 && run_start < ncol {
-            runs.push(GridRun { row: out_row, col_start: (run_start + 1) as i32, col_end: ncol as i32, id: poly_id });
+            runs.push(GridRun { row: out_row, col_start: run_start as i32, col_end: ncol as i32, id: poly_id });
         }
     }
 }

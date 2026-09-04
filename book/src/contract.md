@@ -7,7 +7,7 @@ hand.
 ## Input
 
 A grid is an extent plus a column and row count; the cell size follows.
-Row 1 is the top row, as in every raster format.
+Row 0 is the top row, as in every raster format.
 
 ```rust
 # extern crate controlledburn;
@@ -31,13 +31,15 @@ let r = burn(&[square], &grid, BurnOptions::default()).unwrap();
 # assert_eq!(r.edges.len(), 16);
 ```
 
-Geometry `k` in the input slice (0-based) gets `id = k + 1` in every
-table, so the tables can be joined back to whatever attributes came with
-the geometries.
+Geometry `k` in the input slice has `id = k` in every table, so the
+tables join back to whatever attributes came with the geometries by
+position.
 
 ## Output
 
-`runs` holds the fully covered cells as inclusive column ranges:
+`runs` holds the fully covered cells as half-open column ranges,
+`col_start..col_end`, so `col_end - col_start` is the run length and
+`buffer[col_start..col_end]` is its slice:
 
 ```rust
 # extern crate controlledburn;
@@ -46,12 +48,12 @@ the geometries.
 # let square = Geometry::Polygon(Polygon::new(vec![vec![Coord::new(2.5, 4.5), Coord::new(6.5, 4.5), Coord::new(6.5, 8.5), Coord::new(2.5, 8.5), Coord::new(2.5, 4.5)]]));
 # let r = burn(&[square], &grid, BurnOptions::default()).unwrap();
 for run in &r.runs {
-    println!("row {} cols {}..={} id {}", run.row, run.col_start, run.col_end, run.id);
+    println!("row {} cols {}..{} id {}", run.row, run.col_start, run.col_end, run.id);
 }
-// row 3 cols 4..=6 id 1
-// row 4 cols 4..=6 id 1
-// row 5 cols 4..=6 id 1
-# assert_eq!(r.runs.iter().map(|x| (x.row, x.col_start, x.col_end)).collect::<Vec<_>>(), vec![(3, 4, 6), (4, 4, 6), (5, 4, 6)]);
+// row 2 cols 3..6 id 0
+// row 3 cols 3..6 id 0
+// row 4 cols 3..6 id 0
+# assert_eq!(r.runs.iter().map(|x| (x.row, x.col_start, x.col_end)).collect::<Vec<_>>(), vec![(2, 3, 6), (3, 3, 6), (4, 3, 6)]);
 ```
 
 `edges` holds the boundary cells with the fraction of each cell's area
@@ -111,11 +113,13 @@ assert!((burned - exact).abs() / exact < 1e-5, "{burned} vs {exact}");
 ## What the tables are
 
 Each table is a `Vec` of a plain `#[repr(C)]` struct with `i32` indices
-and, where there is a measure, an `f32`:
+and, where there is a measure, an `f32`. Indices are 0-based and run
+ranges are half-open, the conventions of Rust, Python, C and Arrow; a
+binding for a 1-based language adds 1 at its boundary.
 
 | table | fields | one record means |
 |---|---|---|
-| `runs` | `row, col_start, col_end, id` | cells `col_start..=col_end` on `row` are fully inside geometry `id` |
+| `runs` | `row, col_start, col_end, id` | cells `col_start..col_end` on `row` are fully inside geometry `id` |
 | `edges` | `row, col, fraction, id` | geometry `id` covers `fraction` of cell `(row, col)`, with `0 < fraction < 1` |
 | `lines` | `row, col, length, id` | geometry `id` has `length` units of line inside cell `(row, col)` |
 | `points` | `row, col, id` | geometry `id` has a point in cell `(row, col)` |
