@@ -149,11 +149,19 @@ fn walk_ring(
             }
             let entry_y = tc[0].y;
             let exit_y = tc[tc.len() - 1].y;
-            let crosses = (entry_y > y_mid && exit_y < y_mid) || (entry_y < y_mid && exit_y > y_mid);
-            if !crosses {
+            // Half-open at the row centre: a point exactly on y_mid counts
+            // as above it. A traversal that ends on the centre line and
+            // the next one that starts there then register the crossing
+            // exactly once, in one cell; with a strict test on both sides
+            // neither did, and the row lost its winding from that column
+            // on (crossings on a column wall at the row centre are common
+            // once vertices sit on the lattice).
+            let entry_above = entry_y >= y_mid;
+            let exit_above = exit_y >= y_mid;
+            if entry_above == exit_above {
                 continue;
             }
-            winding_delta += if entry_y >= y_mid { -1 } else { 1 } * winding_factor;
+            winding_delta += if entry_above { -1 } else { 1 } * winding_factor;
         }
         if winding_delta != 0 {
             row_vec.push(BoundaryCellRecord { col: full_col, coverage: 0.0, winding_delta });

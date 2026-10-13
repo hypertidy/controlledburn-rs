@@ -125,11 +125,55 @@ fn point_location(bbox: &BBox, c: &Coord) -> Location {
 ///
 /// Errors correspond to the C++ `std::runtime_error` throws ("Never get
 /// here") and are reported by the caller as a note.
+/// Snap vertices that lie within a tiny tolerance of a cell edge exactly
+/// onto that edge, using the same arithmetic `Grid::cell` uses to place
+/// the edges.
+///
+/// A vertex parsed from input (0.3) and an edge computed from the grid
+/// (3 * 0.1 = 0.30000000000000004) can differ by a few ulp. Left unsnapped,
+/// such a vertex is classified OUTSIDE the cell it visually sits on the
+/// corner of, `BBox::crossing` extrapolates past the segment end, and the
+/// walk leaves the grid along the extended line (the C++ core runs until
+/// `bad_alloc`; here the padded-grid bounds check turns it into an error
+/// and an empty polygon). Where the walk does close, a degenerate corner
+/// exit makes `left_hand_area` over-count the cell. Tolerance is relative
+/// to the cell size; only degenerate near-edge vertices move, by less than
+/// 1e-9 of a cell.
+fn snap_to_lattice(coords: &mut [Coord], grid: &Grid<1>) {
+    let (dx, dy) = (grid.dx(), grid.dy());
+    if dx <= 0.0 || dy <= 0.0 || dx.is_nan() || dy.is_nan() {
+        return;
+    }
+    let (x0, x1, y0, y1) = (grid.xmin(), grid.xmax(), grid.ymin(), grid.ymax());
+    // padded grids carry one padding row/col on each side
+    let ncol = (grid.cols() - 2) as f64;
+    let nrow = (grid.rows() - 2) as f64;
+    let (tol_x, tol_y) = (dx * 1e-9, dy * 1e-9);
+    for c in coords.iter_mut() {
+        let kx = ((c.x - x0) / dx).round();
+        if kx >= 0.0 && kx <= ncol {
+            let bx = if kx == ncol { x1 } else { x0 + kx * dx };
+            if (c.x - bx).abs() <= tol_x {
+                c.x = bx;
+            }
+        }
+        let ky = ((y1 - c.y) / dy).round();
+        if ky >= 0.0 && ky <= nrow {
+            let by = if ky == nrow { y0 } else { y1 - ky * dy };
+            if (c.y - by).abs() <= tol_y {
+                c.y = by;
+            }
+        }
+    }
+}
+
 pub(crate) fn walk_polyline(mut coords: Vec<Coord>, grid: &Grid<1>, closed: bool) -> Result<Cells, String> {
     let mut cells = Cells::default();
     if coords.is_empty() {
         return Ok(cells);
     }
+    snap_to_lattice(&mut coords, grid);
+    let n_input = coords.len();
     // Every input vertex produces at most one arena entry plus one exit
     // crossing per cell change; reserve generously once.
     cells.coords.reserve(coords.len() * 2 + 8);
@@ -198,11 +242,32 @@ pub(crate) fn walk_polyline(mut coords: Vec<Coord>, grid: &Grid<1>, closed: bool
                 // ORIGINAL vertex for robustness (same as Cell::take).
                 let from = if pos > 0 { coords[pos - 1] } else { arena[arena.len() - 1] };
                 let x = bbox.crossing(&from, &next).ok_or_else(|| String::from("Never get here."))?;
-                arena.push(x.coord);
+                let (mut exit_c, mut exit_s) = (x.coord, x.side);
+                // Rounding guard (see snap_to_lattice): a crossing that lies
+                // beyond the segment end can only come from a target that is
+                // outside the box by rounding error. Clamp the target onto
+                // the box and exit there instead of extrapolating.
+                {
+                    let d_next = (next.x - from.x).powi(2) + (next.y - from.y).powi(2);
+                    let d_exit = (exit_c.x - from.x).powi(2) + (exit_c.y - from.y).powi(2);
+                    if !exit_c.x.is_finite() || !exit_c.y.is_finite() || d_exit > d_next * (1.0 + 1e-9) {
+                        exit_c = Coord::new(next.x.clamp(bbox.xmin, bbox.xmax), next.y.clamp(bbox.ymin, bbox.ymax));
+                        exit_s = if next.x < bbox.xmin {
+                            Side::Left
+                        } else if next.x > bbox.xmax {
+                            Side::Right
+                        } else if next.y < bbox.ymin {
+                            Side::Bottom
+                        } else {
+                            Side::Top
+                        };
+                    }
+                }
+                arena.push(exit_c);
                 trav.len += 1;
-                trav.exit = Some(x.side);
-                if x.coord != next {
-                    last_exit = Some(x.coord);
+                trav.exit = Some(exit_s);
+                if exit_c != next {
+                    last_exit = Some(exit_c);
                 }
                 break;
             }
@@ -220,6 +285,11 @@ pub(crate) fn walk_polyline(mut coords: Vec<Coord>, grid: &Grid<1>, closed: bool
         let incomplete = exited && trav.entry.is_none();
 
         if incomplete && closed {
+            // A closed ring is reprocessed at most once per starting cell;
+            // if the coordinate list keeps growing the walk is not converging.
+            if coords.len() > 4 * n_input + 64 {
+                return Err("ring walk did not converge (vertex on cell boundary?)".into());
+            }
             coords.extend_from_slice(trav.coords(arena));
         }
 
