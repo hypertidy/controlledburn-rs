@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use crate::approx::process_polygon_approx;
-use crate::coalesce::coalesce_sorted;
+use crate::coalesce::coalesce_runs;
 use crate::error::BurnError;
 use crate::geometry::{Geometry, Polygon};
 use crate::grid::{Grid, GridSpec};
@@ -126,11 +126,17 @@ fn process_geometry(
             BurnMode::Approx => process_polygon_approx(poly, gs, geom_id, &mut out.runs),
             BurnMode::Coverage => process_polygon(poly, full_grid, geom_id, &mut out.runs, &mut out.edges)?,
         }
-        if opts.coalesce_runs && out.runs.len() > run_start {
-            let mut tail = out.runs.split_off(run_start);
-            coalesce_sorted(&mut tail);
-            out.runs.extend(tail);
-        }
+    }
+    // Coalesce once per geometry, after every part has been swept. The
+    // sweep emits one part's runs in (row, col) order, but a second part
+    // of a multipolygon starts a new row-major sequence, so the tail is
+    // not sorted across parts; coalesce_sorted() then took a later part's
+    // run on a row the earlier part had already passed as an overlap and
+    // dropped it (Canada at 1 degree lost five whole cells).
+    if opts.coalesce_runs && out.runs.len() > run_start {
+        let mut tail = out.runs.split_off(run_start);
+        coalesce_runs(&mut tail);
+        out.runs.extend(tail);
     }
     for line in g.lines() {
         process_line(line, full_grid, geom_id, &mut out.lines)?;

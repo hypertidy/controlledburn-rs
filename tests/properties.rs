@@ -23,6 +23,9 @@
 //!      cell untouched in coverage mode is not.
 //!   6. burning at 2x resolution and averaging 2x2 blocks equals burning at
 //!      1x (right in total but wrong in placement is still a failure).
+//!   7. a multipolygon of two disjoint rings burns to the cell-wise sum of
+//!      the two rings burned separately (this is where run coalescing
+//!      across parts went wrong).
 //!
 //! Run a long campaign with
 //!   PROPTEST_CASES=20000 cargo test --test properties --release
@@ -493,5 +496,68 @@ proptest! {
             let got = m1[row * nc + col];
             prop_assert!((got - agg).abs() <= 2e-6, "row {row} col {col}: 1x {got} vs 2x aggregate {agg}\n{}\n{}", fmt_grid(&g), fmt_ring(&ring));
         } }
+    }
+}
+
+/// Two rings from the same grid, kept apart by translating the second so
+/// their bounding boxes cannot overlap; whichever lands inside the grid is
+/// still a valid multipolygon input.
+type Ring = Vec<(f64, f64)>;
+
+fn two_rings() -> impl Strategy<Value = (G, Ring, Ring)> {
+    grid().prop_flat_map(|g| {
+        let g2 = g.clone();
+        (ring_on(g.clone()), ring_on(g2)).prop_filter_map("disjoint", move |((_, a), (_, b))| {
+            let bb = |r: &[(f64, f64)]| {
+                r.iter().fold((f64::MAX, f64::MAX, f64::MIN, f64::MIN), |m, p| {
+                    (m.0.min(p.0), m.1.min(p.1), m.2.max(p.0), m.3.max(p.1))
+                })
+            };
+            let (ba, bbx) = (bb(&a), bb(&b));
+            // shift b to the right of a by a whole number of cells so both
+            // can still share rows; if that leaves the grid entirely, drop
+            let res = g.res();
+            let shift = ((ba.2 - bbx.0) / res).ceil() * res + res;
+            let b2: Vec<(f64, f64)> = b.iter().map(|p| (p.0 + shift, p.1)).collect();
+            let e = g.ext();
+            if b2.iter().all(|p| p.0 > e.xmax) {
+                return None;
+            }
+            Some((g.clone(), a, b2))
+        })
+    })
+}
+
+fn multi(a: &[(f64, f64)], b: &[(f64, f64)]) -> Geometry {
+    Geometry::MultiPolygon(vec![
+        Polygon::new(vec![a.iter().map(|&p| Coord::from(p)).collect()]),
+        Polygon::new(vec![b.iter().map(|&p| Coord::from(p)).collect()]),
+    ])
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 1500,
+        max_shrink_iters: 4000,
+        failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::WithSource("proptest-regressions"))),
+        .. ProptestConfig::default()
+    })]
+
+    #[test]
+    fn multipolygon_is_the_sum_of_its_parts((g, a, b) in two_rings(), swap in any::<bool>()) {
+        // part order matters to a sweep that emits runs part by part: with
+        // the right-hand ring first, the left-hand ring's runs arrive on
+        // rows already passed
+        let (a, b) = if swap { (b, a) } else { (a, b) };
+        for opts in [BurnOptions::default(), BurnOptions::approx()] {
+            let both = cover(&burn(&[multi(&a, &b)], &g.spec, opts).unwrap(), &g);
+            let pa = cover(&burn1(&a, &g, opts), &g);
+            let pb = cover(&burn1(&b, &g, opts), &g);
+            for (i, v) in both.iter().enumerate() {
+                let want = pa[i] + pb[i];
+                prop_assert!((v - want).abs() <= 2e-6,
+                    "cell {i}: multipolygon {v} vs parts {want} ({:?})\n{}\n{}\n{}", opts.mode, fmt_grid(&g), fmt_ring(&a), fmt_ring(&b));
+            }
+        }
     }
 }
