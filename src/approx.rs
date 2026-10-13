@@ -75,7 +75,15 @@ pub(crate) fn process_polygon_approx(poly: &Polygon, gs: &GridSpec, poly_id: i32
                 let y_mid = gs.ymax - (r as f64 + 0.5) * dy;
                 let t = (y_mid - y0) * inv_dy_edge;
                 let x_int = x0 + t * (x1 - x0);
-                let delta = if y0 >= y_mid { -1 } else { 1 } * wf;
+                // Crossing direction from the edge's own endpoints, not from
+                // y0 against the recomputed y_mid: the row-range test above
+                // admits an edge whose top endpoint is on the centre line
+                // (within 1e-10), but that endpoint can sit an ulp below
+                // y_mid as recomputed from ymax and dy, and `y0 >= y_mid`
+                // then tags a downward edge as upward. Its intercept gets the
+                // wrong sign, the winding never returns to zero, and the row
+                // fills to the grid edge.
+                let delta = if y1 < y0 { -1 } else { 1 } * wf;
                 row_intercepts[(r - row_lo) as usize].push(Intercept { x: x_int, delta });
             }
         }
