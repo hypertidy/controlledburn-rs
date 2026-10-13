@@ -231,3 +231,22 @@ fn vertex_a_few_ulp_off_a_cell_edge_does_not_derail_the_walk() {
         assert!(near(area(&r, &g), expected, 1e-6), "area {} vs {}", area(&r, &g), expected);
     }
 }
+
+#[test]
+fn row_centre_crossing_on_a_column_wall_keeps_its_winding() {
+    // Falkland Islands from Natural Earth 110m, shifted so every vertex
+    // sits on a 0.05 multiple. At 20 columns (res 0.5) the first edge
+    // crosses the row centre y = 1.25 at x = 1.0, exactly on a column wall;
+    // with a strict crossing test neither adjacent cell registered it and
+    // the row lost two interior cells. Exact at every resolution now.
+    let ring = vec![
+        (0.8, 1.15), (2.0, 1.75), (2.85, 1.5), (3.45, 1.9), (4.25, 1.45),
+        (3.95, 1.1), (2.6, 0.8), (2.15, 1.15), (1.3, 0.7), (0.8, 1.15),
+    ];
+    let expected = 2.12875;
+    for n in [20u32, 100, 200, 1000] {
+        let g = GridSpec::new(0.0, 0.0, 10.0, 10.0, n, n);
+        let r = burn(&[poly(vec![ring.clone()])], &g, BurnOptions::default()).unwrap();
+        assert!(near(area(&r, &g), expected, 1e-6), "ncol {n}: area {} vs {}", area(&r, &g), expected);
+    }
+}
