@@ -28,6 +28,10 @@ jobs:
         run: cargo test
       - name: Test (release, golden parity)
         run: cargo test --release --test golden
+      - name: Property tests (release, 10000 cases per property)
+        run: cargo test --release --test properties
+        env:
+          PROPTEST_CASES: "10000"
       - name: Test with all features
         run: cargo test --all-features
 

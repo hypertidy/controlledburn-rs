@@ -74,6 +74,29 @@ edge-case probes) in both modes. Edge fractions and line lengths are
 compared as f32 bit patterns. `tests/fixtures.rs` runs the shared
 aggregate contract from `fixtures/{geometries,expected}.csv`.
 
+## Properties
+
+`tests/properties.rs` generates random simple rings on non-dyadic grids,
+with vertices deliberately steered onto cell corners, cell walls, row and
+column centre lines and the grid boundary (the places where parsed input
+and computed cell edges disagree by an ulp), and checks invariants that
+must hold for every input: coverage equals the ring's planar area clipped
+to the grid; the tables are well formed; the cover matrix is invariant
+under ring orientation and start vertex; it matches an exact per-cell
+clipping oracle on small grids; approx and coverage agree on full and
+empty cells; burning at 2x resolution and averaging 2x2 blocks equals
+burning at 1x. CI runs 10000 cases per property. For a longer campaign:
+
+```
+PROPTEST_CASES=100000 cargo test --release --test properties
+```
+
+Shrunken failures are persisted in `tests/properties.proptest-regressions`
+and replayed first on every run; commit that file when it changes. Rings
+that touch themselves (a repeated vertex, a vertex on another edge) are
+invalid polygons; the generator filters them and the crate gives no
+defined result for them.
+
 ## Performance
 
 200,000-vertex jittered ring, single core (`cargo bench`):

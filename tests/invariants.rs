@@ -240,8 +240,16 @@ fn row_centre_crossing_on_a_column_wall_keeps_its_winding() {
     // with a strict crossing test neither adjacent cell registered it and
     // the row lost two interior cells. Exact at every resolution now.
     let ring = vec![
-        (0.8, 1.15), (2.0, 1.75), (2.85, 1.5), (3.45, 1.9), (4.25, 1.45),
-        (3.95, 1.1), (2.6, 0.8), (2.15, 1.15), (1.3, 0.7), (0.8, 1.15),
+        (0.8, 1.15),
+        (2.0, 1.75),
+        (2.85, 1.5),
+        (3.45, 1.9),
+        (4.25, 1.45),
+        (3.95, 1.1),
+        (2.6, 0.8),
+        (2.15, 1.15),
+        (1.3, 0.7),
+        (0.8, 1.15),
     ];
     let expected = 2.12875;
     for n in [20u32, 100, 200, 1000] {
@@ -249,4 +257,27 @@ fn row_centre_crossing_on_a_column_wall_keeps_its_winding() {
         let r = burn(&[poly(vec![ring.clone()])], &g, BurnOptions::default()).unwrap();
         assert!(near(area(&r, &g), expected, 1e-6), "ncol {n}: area {} vs {}", area(&r, &g), expected);
     }
+}
+
+#[test]
+fn approx_vertex_on_row_centre_does_not_fill_to_grid_edge() {
+    // Found by the property suite (tests/properties.rs), shrunk by proptest.
+    // The middle vertex sits on the centre line of row 24 as the generator
+    // computed it (ymax - 24.5 / 3), one ulp below the same line recomputed
+    // from the extent-derived dy. The row-range test admitted the downward
+    // edge starting there; the sign test (y0 >= y_mid) called it upward;
+    // the two intercepts then had the same sign and the row filled from
+    // the polygon to the right edge of the grid.
+    let g = GridSpec::new(-180.0, -90.0, -175.0, -80.66666666666667, 15, 28);
+    let ring = vec![
+        (-179.89654756364214, -88.83333333333334),
+        (-180.94076559960791, -92.3680897750401),
+        (-179.6, -88.518152273978),
+        (-179.89654756364214, -88.83333333333334),
+    ];
+    let r = burn(&[poly(vec![ring])], &g, BurnOptions::approx()).unwrap();
+    for run in &r.runs {
+        assert!(run.col_end <= 2, "approx run spills past the polygon: {run:?}");
+    }
+    assert_eq!(r.runs.len(), 2);
 }
