@@ -26,6 +26,9 @@
 //!   7. a multipolygon of two disjoint rings burns to the cell-wise sum of
 //!      the two rings burned separately (this is where run coalescing
 //!      across parts went wrong).
+//!   8. a polygon with a hole burns, cell by cell, to the exterior ring's
+//!      cover minus the hole ring's cover (this is where hole-boundary
+//!      cells were being dropped).
 //!
 //! Run a long campaign with
 //!   PROPTEST_CASES=20000 cargo test --test properties --release
@@ -559,5 +562,98 @@ proptest! {
                     "cell {i}: multipolygon {v} vs parts {want} ({:?})\n{}\n{}\n{}", opts.mode, fmt_grid(&g), fmt_ring(&a), fmt_ring(&b));
             }
         }
+    }
+}
+
+/// A ring with a hole: the hole is a second lattice-biased ring scaled and
+/// translated into the exterior's interior (centre of the exterior's
+/// bounding box, 35% of its size), then checked to lie strictly inside.
+fn ring_with_hole() -> impl Strategy<Value = (G, Ring, Ring)> {
+    grid().prop_flat_map(|g| {
+        let g2 = g.clone();
+        (ring_on(g.clone()), ring_on(g2)).prop_filter_map("hole inside exterior", move |((_, outer), (_, h))| {
+            let bb = |r: &[(f64, f64)]| {
+                r.iter().fold((f64::MAX, f64::MAX, f64::MIN, f64::MIN), |m, p| {
+                    (m.0.min(p.0), m.1.min(p.1), m.2.max(p.0), m.3.max(p.1))
+                })
+            };
+            let bo = bb(&outer);
+            let bh = bb(&h);
+            let (cx, cy) = ((bo.0 + bo.2) / 2.0, (bo.1 + bo.3) / 2.0);
+            let (hx, hy) = ((bh.0 + bh.2) / 2.0, (bh.1 + bh.3) / 2.0);
+            let sx = 0.35 * (bo.2 - bo.0) / (bh.2 - bh.0).max(1e-12);
+            let sy = 0.35 * (bo.3 - bo.1) / (bh.3 - bh.1).max(1e-12);
+            // snap the scaled hole's vertices back onto the lattice where
+            // they were on it before, so the hole keeps its seams
+            let res = g.res();
+            let e = g.ext();
+            let hole: Vec<(f64, f64)> = h
+                .iter()
+                .map(|p| {
+                    let x = cx + (p.0 - hx) * sx;
+                    let y = cy + (p.1 - hy) * sy;
+                    let kx = ((x - e.xmin) / res).round();
+                    let ky = ((e.ymax - y) / res).round();
+                    let xs = if ((x - (e.xmin + kx * res)).abs()) < 0.15 * res { e.xmin + kx * res } else { x };
+                    let ys = if ((y - (e.ymax - ky * res)).abs()) < 0.15 * res { e.ymax - ky * res } else { y };
+                    (xs, ys)
+                })
+                .collect();
+            // the hole must be strictly inside the exterior: every hole vertex
+            // inside the outer ring and no edge contact
+            let inside = |r: &[(f64, f64)], p: (f64, f64)| {
+                let mut c = false;
+                for i in 0..r.len() - 1 {
+                    let (a, b) = (r[i], r[i + 1]);
+                    if (a.1 > p.1) != (b.1 > p.1) && p.0 < (b.0 - a.0) * (p.1 - a.1) / (b.1 - a.1) + a.0 {
+                        c = !c;
+                    }
+                }
+                c
+            };
+            if !hole.iter().all(|&p| inside(&outer, p)) || !is_simple(&hole) {
+                return None;
+            }
+            for i in 0..outer.len() - 1 {
+                for j in 0..hole.len() - 1 {
+                    if seg_touch(outer[i], outer[i + 1], hole[j], hole[j + 1]) {
+                        return None;
+                    }
+                }
+            }
+            Some((g.clone(), outer, hole))
+        })
+    })
+}
+
+fn with_hole(outer: &[(f64, f64)], hole: &[(f64, f64)]) -> Geometry {
+    Geometry::Polygon(Polygon::new(vec![
+        outer.iter().map(|&p| Coord::from(p)).collect(),
+        hole.iter().map(|&p| Coord::from(p)).collect(),
+    ]))
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 1500,
+        max_shrink_iters: 4000,
+        failure_persistence: Some(Box::new(proptest::test_runner::FileFailurePersistence::WithSource("proptest-regressions"))),
+        .. ProptestConfig::default()
+    })]
+
+    #[test]
+    fn hole_subtracts_cell_by_cell((g, outer, hole) in ring_with_hole()) {
+        let got = cover(&burn(&[with_hole(&outer, &hole)], &g.spec, BurnOptions::default()).unwrap(), &g);
+        let po = cover(&burn1(&outer, &g, BurnOptions::default()), &g);
+        let ph = cover(&burn1(&hole, &g, BurnOptions::default()), &g);
+        for (i, v) in got.iter().enumerate() {
+            let want = po[i] - ph[i];
+            prop_assert!((v - want).abs() <= 2e-6,
+                "cell {i}: with hole {v} vs outer - hole {want}\n{}\nouter {}\nhole {}", fmt_grid(&g), fmt_ring(&outer), fmt_ring(&hole));
+        }
+        // and the total against the clipped planar areas
+        let truth = clipped_area(&outer, &g) - clipped_area(&hole, &g);
+        let a = area(&burn(&[with_hole(&outer, &hole)], &g.spec, BurnOptions::default()).unwrap(), &g.spec);
+        prop_assert!((a - truth).abs() <= 1e-6 * truth.max(1.0) + 1e-6, "area {a} vs {truth}");
     }
 }

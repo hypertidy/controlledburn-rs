@@ -281,3 +281,25 @@ fn approx_vertex_on_row_centre_does_not_fill_to_grid_edge() {
     }
     assert_eq!(r.runs.len(), 2);
 }
+
+#[test]
+fn hole_boundary_cells_keep_the_part_outside_the_hole() {
+    // A cell traversed only by a hole ring carried a negative hole fraction
+    // and no exterior fraction, so the sweep emitted nothing for it: every
+    // polygon with a hole lost the ring of cells along the hole boundary.
+    let outer = vec![(0.5, 0.5), (9.5, 0.5), (9.5, 9.5), (0.5, 9.5), (0.5, 0.5)];
+    let hole = vec![(3.3, 3.3), (6.7, 3.3), (6.7, 6.7), (3.3, 6.7), (3.3, 3.3)];
+    let truth = 81.0 - 3.4 * 3.4;
+    for n in [10u32, 20, 50, 100] {
+        let g = GridSpec::new(0.0, 0.0, 10.0, 10.0, n, n);
+        let r = burn(&[poly(vec![outer.clone(), hole.clone()])], &g, BurnOptions::default()).unwrap();
+        assert!(near(area(&r, &g), truth, 1e-6), "ncol {n}: area {} vs {truth}", area(&r, &g));
+    }
+    // at 10 columns, cell (row 6, col 3) holds the hole's corner: covered
+    // except 0.7 x 0.7 of it
+    let g = GridSpec::new(0.0, 0.0, 10.0, 10.0, 10, 10);
+    let r = burn(&[poly(vec![outer, hole])], &g, BurnOptions::default()).unwrap();
+    let e: Vec<_> = r.edges.iter().filter(|e| e.row == 6 && e.col == 3).collect();
+    assert_eq!(e.len(), 1);
+    assert!((e[0].fraction as f64 - 0.51).abs() < 1e-6, "fraction {}", e[0].fraction);
+}

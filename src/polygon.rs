@@ -23,6 +23,13 @@ struct BoundaryCellRecord {
     /// C++ core bit for bit.
     coverage: f32,
     winding_delta: i32,
+    /// The exterior ring's own share of `winding_delta`, and whether the
+    /// exterior ring traverses this cell at all. A cell traversed only by
+    /// holes has no exterior fraction of its own; whether it lies inside
+    /// the exterior is decided by the exterior's winding alone, which is
+    /// constant across such a cell. See the sweep.
+    winding_delta_ext: i32,
+    touched_exterior: bool,
 }
 
 pub(crate) fn ring_envelope(ring: &[Coord]) -> BBox {
@@ -134,7 +141,13 @@ fn walk_ring(
         let row_vec = &mut row_data[sub_r];
 
         if frac != 0.0 {
-            row_vec.push(BoundaryCellRecord { col: full_col, coverage: coverage_factor * frac, winding_delta: 0 });
+            row_vec.push(BoundaryCellRecord {
+                col: full_col,
+                coverage: coverage_factor * frac,
+                winding_delta: 0,
+                winding_delta_ext: 0,
+                touched_exterior: is_exterior,
+            });
         }
 
         // Winding deltas must be stored even when coverage is zero: a
@@ -164,7 +177,13 @@ fn walk_ring(
             winding_delta += if entry_above { -1 } else { 1 } * winding_factor;
         }
         if winding_delta != 0 {
-            row_vec.push(BoundaryCellRecord { col: full_col, coverage: 0.0, winding_delta });
+            row_vec.push(BoundaryCellRecord {
+                col: full_col,
+                coverage: 0.0,
+                winding_delta,
+                winding_delta_ext: if is_exterior { winding_delta } else { 0 },
+                touched_exterior: is_exterior,
+            });
         }
     }
     Ok(())
@@ -242,6 +261,8 @@ pub(crate) fn process_polygon(
                 if last.col == rec.col {
                     last.coverage += rec.coverage;
                     last.winding_delta += rec.winding_delta;
+                    last.winding_delta_ext += rec.winding_delta_ext;
+                    last.touched_exterior |= rec.touched_exterior;
                     continue;
                 }
             }
@@ -249,6 +270,7 @@ pub(crate) fn process_polygon(
         }
 
         let mut winding: i32 = 0;
+        let mut winding_ext: i32 = 0;
         let mut prev_col: i64 = -2;
         let full_row = (row_off + sr) as i32;
 
@@ -264,7 +286,16 @@ pub(crate) fn process_polygon(
                 });
             }
 
-            let w = mc.coverage;
+            let mut w = mc.coverage;
+            // A cell traversed only by hole rings carries a negative hole
+            // fraction and no exterior fraction. If the exterior's winding
+            // places it inside the exterior, it is covered except for the
+            // hole: 1 + coverage. Previously such cells got nothing, so
+            // every polygon with a hole lost the ring of cells along the
+            // hole boundary.
+            if !mc.touched_exterior && winding_ext != 0 {
+                w += 1.0;
+            }
             if w > tol && w < one_minus_tol {
                 edges.push(GridEdge { row: full_row, col: mc.col as i32, fraction: w, id: poly_id });
             } else if w >= one_minus_tol {
@@ -273,6 +304,7 @@ pub(crate) fn process_polygon(
             }
 
             winding += mc.winding_delta;
+            winding_ext += mc.winding_delta_ext;
             prev_col = mc.col;
         }
     }
