@@ -14,7 +14,7 @@ use crate::error::BurnError;
 
 /// Regular grid specification. Cell size is derived:
 /// `dx = (xmax - xmin) / ncol`, `dy = (ymax - ymin) / nrow`.
-/// Row 1 is the top row (the `ymax` edge), matching raster convention.
+/// Row 0 is the top row (the `ymax` edge), matching raster convention.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct GridSpec {
@@ -58,6 +58,11 @@ impl GridSpec {
         }
         if self.xmax <= self.xmin || self.ymax <= self.ymin {
             return Err(BurnError::InvalidGrid("invalid extent: xmax must be > xmin, ymax must be > ymin".into()));
+        }
+        // Finite bounds can still span more than f64 can hold (e.g. -1e308
+        // to 1e308); the cell size is then infinite and nothing would burn.
+        if !(self.dx().is_finite() && self.dy().is_finite()) {
+            return Err(BurnError::InvalidGrid("invalid extent: extent span overflows double precision".into()));
         }
         Ok(())
     }

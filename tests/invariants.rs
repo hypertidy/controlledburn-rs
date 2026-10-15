@@ -281,3 +281,25 @@ fn approx_vertex_on_row_centre_does_not_fill_to_grid_edge() {
     }
     assert_eq!(r.runs.len(), 2);
 }
+
+#[test]
+fn invalid_grids_are_rejected() {
+    // Each of these used to pass validate(): inf and NaN bounds are caught
+    // by the finiteness check; the last has finite bounds whose span
+    // overflows f64, which gave an infinite cell size and an empty burn.
+    let g = square(1., 1., 3., 3.);
+    let bad = [
+        GridSpec::new(0., 0., f64::INFINITY, 4., 4, 4),
+        GridSpec::new(f64::NEG_INFINITY, 0., 4., 4., 4, 4),
+        GridSpec::new(0., 0., f64::NAN, 4., 4, 4),
+        GridSpec::new(0., f64::NAN, 4., 4., 4, 4),
+        GridSpec::new(-1e308, 0., 1e308, 4., 4, 4),
+        GridSpec::new(0., -1e308, 4., 1e308, 4, 4),
+    ];
+    for gs in bad {
+        assert!(gs.validate().is_err(), "{gs:?} should be invalid");
+        assert!(burn(std::slice::from_ref(&g), &gs, BurnOptions::default()).is_err(), "{gs:?}");
+    }
+    // a huge but representable span is still fine
+    assert!(GridSpec::new(-1e307, 0., 1e307, 4., 4, 4).validate().is_ok());
+}

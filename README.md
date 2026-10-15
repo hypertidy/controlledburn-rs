@@ -59,9 +59,11 @@ into a dense `f64` buffer with fasterize-style pixel functions.
 - Adjacent runs on a row are coalesced by default;
   `BurnOptions::parity(mode)` turns that off for record-for-record
   equality with the C++ tables.
-- Indices are 0-based, run ranges half-open and `id = k`; the C++ core
-  and its R and Python bindings emit 1-based indices, inclusive `col_end`
-  and `id = k + 1`. The golden tests apply that offset when comparing.
+- Indices are 0-based, run ranges half-open and `id = k`, the same as the
+  C++ core and the Python package; the R package adds 1 (1-based indices,
+  inclusive `col_end`, `id = k + 1`). The golden file predates the C++
+  core's switch to 0-based and is in the 1-based form, so the golden
+  tests apply that offset when comparing.
 - Sorts are stable, so ties among equal-x intercepts in Approx mode are
   deterministic.
 
@@ -69,7 +71,7 @@ into a dense `f64` buffer with fasterize-style pixel functions.
 
 `tests/golden.rs` compares every output table, in order, against
 `fixtures/controlledburn-golden.json`, which was dumped from the C++
-build for 25 cases (the 10 shared cross-language fixtures plus 15
+build for 26 cases (the 11 shared cross-language fixtures plus 15
 edge-case probes) in both modes. Edge fractions and line lengths are
 compared as f32 bit patterns. `tests/fixtures.rs` runs the shared
 aggregate contract from `fixtures/{geometries,expected}.csv`.
