@@ -76,7 +76,31 @@ pub struct BurnResult {
     pub notes: Vec<Note>,
 }
 
+/// Reserved capacities for the four output tables, typically from a
+/// pre-pass estimate (see [`crate::estimate_capacity`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Capacity {
+    pub runs: usize,
+    pub edges: usize,
+    pub lines: usize,
+    pub points: usize,
+}
+
 impl BurnResult {
+    /// Empty tables with each `Vec` pre-allocated to `cap`, so a large
+    /// burn fills them without the reallocation cascade of `Vec` doubling.
+    /// `notes` is left unreserved (problems are rare).
+    pub fn with_capacity(cap: Capacity) -> Self {
+        BurnResult {
+            runs: Vec::with_capacity(cap.runs),
+            edges: Vec::with_capacity(cap.edges),
+            lines: Vec::with_capacity(cap.lines),
+            points: Vec::with_capacity(cap.points),
+            notes: Vec::new(),
+        }
+    }
+
     /// Total number of cells covered by `runs` (sum of run lengths).
     pub fn run_cells(&self) -> u64 {
         self.runs.iter().map(|r| (r.col_end - r.col_start) as u64).sum()

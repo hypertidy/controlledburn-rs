@@ -75,6 +75,7 @@ mod coalesce;
 mod coverage;
 mod ee;
 mod error;
+mod estimate;
 #[cfg(feature = "geo-types")]
 pub mod geo;
 mod geometry;
@@ -90,8 +91,9 @@ mod wkb;
 pub use burn::{burn, burn_wkb, BurnMode, BurnOptions};
 pub use coalesce::coalesce_runs;
 pub use error::{BurnError, WkbError};
+pub use estimate::estimate_capacity;
 pub use geometry::{is_ccw, signed_area, Coord, CoordSeq, Geometry, Polygon};
 pub use grid::GridSpec;
 pub use materialize::{materialize, EdgePolicy, MaterializeOptions, PixelFn};
-pub use output::{BurnResult, GridEdge, GridLine, GridPoint, GridRun, Note};
+pub use output::{BurnResult, Capacity, GridEdge, GridLine, GridPoint, GridRun, Note};
 pub use wkb::parse_wkb;

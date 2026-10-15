@@ -5,6 +5,7 @@ use std::borrow::Cow;
 use crate::approx::process_polygon_approx;
 use crate::coalesce::coalesce_sorted;
 use crate::error::BurnError;
+use crate::estimate::{estimate_capacity, estimate_capacity_iter};
 use crate::geometry::{Geometry, Polygon};
 use crate::grid::{Grid, GridSpec};
 use crate::line::process_line;
@@ -166,7 +167,9 @@ pub fn burn(geoms: &[Geometry], grid: &GridSpec, opts: impl Into<BurnOptions>) -
     grid.validate()?;
     let opts = opts.into();
     let full_grid = grid.bounded();
-    let mut out = BurnResult::default();
+    // Reserve each table from a one-pass estimate, so a large burn skips
+    // the Vec-doubling reallocation cascade.
+    let mut out = BurnResult::with_capacity(estimate_capacity(geoms, grid, opts.mode));
     for (k, g) in geoms.iter().enumerate() {
         burn_one(g, k, &full_grid, grid, &mut out, &opts);
     }
@@ -183,14 +186,25 @@ where
     grid.validate()?;
     let opts = opts.into();
     let full_grid = grid.bounded();
-    let mut out = BurnResult::default();
-    for (k, blob) in wkb.into_iter().enumerate() {
-        if blob.is_empty() {
-            continue;
-        }
-        match parse_wkb(blob) {
-            Ok(g) => burn_one(&g, k, &full_grid, grid, &mut out, &opts),
-            Err(e) => out.note(k, format!("failed to parse WKB: {e}")),
+
+    // Buffer the parse so the output can be sized before burning: a large
+    // WKB burn otherwise grows the tables by Vec doubling. Each blob keeps
+    // its input index for `id` and notes; parse failures are held as notes
+    // in place, so the note order matches the streaming path.
+    let items: Vec<(usize, Result<Geometry, String>)> = wkb
+        .into_iter()
+        .enumerate()
+        .filter(|(_, blob)| !blob.is_empty())
+        .map(|(k, blob)| (k, parse_wkb(blob).map_err(|e| format!("failed to parse WKB: {e}"))))
+        .collect();
+
+    let cap = estimate_capacity_iter(items.iter().filter_map(|(_, r)| r.as_ref().ok()), grid, opts.mode);
+    let mut out = BurnResult::with_capacity(cap);
+
+    for (k, r) in &items {
+        match r {
+            Ok(g) => burn_one(g, *k, &full_grid, grid, &mut out, &opts),
+            Err(msg) => out.note(*k, msg.clone()),
         }
     }
     Ok(out)
