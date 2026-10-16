@@ -72,6 +72,42 @@ fn multipolygon_components_independent() {
     assert!(r.runs.iter().all(|x| x.id == 0));
 }
 
+fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Polygon {
+    Polygon::new(vec![[(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)].into_iter().map(Coord::from).collect()])
+}
+
+/// Coalesced runs are the parity runs passed through `coalesce_runs`, in
+/// both modes, whatever the order of a multipolygon's parts.
+fn assert_coalesced_matches_parity(g: &Geometry, grid: &GridSpec) {
+    for mode in [BurnMode::Coverage, BurnMode::Approx] {
+        let got = burn(std::slice::from_ref(g), grid, BurnOptions::default().with_mode(mode)).unwrap();
+        let mut want = burn(std::slice::from_ref(g), grid, BurnOptions::parity(mode)).unwrap().runs;
+        coalesce_runs(&mut want);
+        assert_eq!(got.runs, want, "{mode:?}");
+    }
+}
+
+#[test]
+fn multipolygon_later_part_left_of_earlier_on_shared_row() {
+    // Part 1 ends on row 5 at cols 6..9; part 2 starts on row 5 at cols
+    // 1..4. Merging part 2's run into part 1's used to drop it.
+    let g = Geometry::MultiPolygon(vec![rect(6., 4., 9., 7.), rect(1., 1., 4., 5.)]);
+    let r = burn(std::slice::from_ref(&g), &G10, BurnOptions::default()).unwrap();
+    assert_eq!(area(&r, &G10), 21.0);
+    assert_coalesced_matches_parity(&g, &G10);
+}
+
+#[test]
+fn multipolygon_touching_parts_coalesce_across_parts() {
+    // The parts touch along x = 5 on row 5: one run, cols 2..8.
+    let g = Geometry::MultiPolygon(vec![rect(5., 4., 8., 7.), rect(2., 2., 5., 5.)]);
+    let r = burn(std::slice::from_ref(&g), &G10, BurnOptions::default()).unwrap();
+    assert_eq!(area(&r, &G10), 18.0);
+    let row5: Vec<_> = r.runs.iter().filter(|x| x.row == 5).copied().collect();
+    assert_eq!(row5, vec![GridRun { row: 5, col_start: 2, col_end: 8, id: 0 }]);
+    assert_coalesced_matches_parity(&g, &G10);
+}
+
 #[test]
 fn beyond_extent_and_straddle() {
     let r = burn(&[square(-5., -5., 15., 15.)], &G10, BurnOptions::default()).unwrap();

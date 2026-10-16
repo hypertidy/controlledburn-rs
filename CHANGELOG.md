@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **Run coalescing dropped cells from multipolygons.** A multipolygon's
+  runs were merged as if they were sorted by row and column, but they are
+  only sorted within each part. When a later part had a run on a row to
+  the left of an earlier part's last run on that row, the merge swallowed
+  it, and those fully covered cells were lost (both modes). The runs are
+  now sorted before merging, so the coalesced runs always equal the parity
+  runs passed through `coalesce_runs`, and touching parts merge into one
+  run. Parity mode (`coalesce_runs = false`) was not affected, nor is the
+  C++ core, which does not coalesce. A multipolygon's runs now come out
+  ordered by row and column instead of part by part. Found burning North
+  Carolina counties onto a rotated grid (#7), where Craven county lost
+  two cells.
+
 ## 0.2.1
 
 Bug fixes only; no public API changes. Output changes only where the
