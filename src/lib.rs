@@ -70,6 +70,7 @@
 #![warn(missing_debug_implementations)]
 
 mod approx;
+mod axis;
 mod burn;
 mod coalesce;
 mod coverage;

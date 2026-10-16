@@ -115,7 +115,6 @@ fn normalize(g: &Geometry) -> Cow<'_, Geometry> {
 fn process_geometry(
     g: &Geometry,
     full_grid: &Grid<0>,
-    gs: &GridSpec,
     geom_id: i32,
     out: &mut BurnResult,
     opts: &BurnOptions,
@@ -123,7 +122,7 @@ fn process_geometry(
     let run_start = out.runs.len();
     for poly in g.polygons() {
         match opts.mode {
-            BurnMode::Approx => process_polygon_approx(poly, gs, geom_id, &mut out.runs),
+            BurnMode::Approx => process_polygon_approx(poly, full_grid, geom_id, &mut out.runs),
             BurnMode::Coverage => process_polygon(poly, full_grid, geom_id, &mut out.runs, &mut out.edges)?,
         }
         if opts.coalesce_runs && out.runs.len() > run_start {
@@ -141,7 +140,7 @@ fn process_geometry(
     Ok(())
 }
 
-fn burn_one(g: &Geometry, k: usize, full_grid: &Grid<0>, gs: &GridSpec, out: &mut BurnResult, opts: &BurnOptions) {
+fn burn_one(g: &Geometry, k: usize, full_grid: &Grid<0>, out: &mut BurnResult, opts: &BurnOptions) {
     if g.is_empty() {
         return;
     }
@@ -150,7 +149,7 @@ fn burn_one(g: &Geometry, k: usize, full_grid: &Grid<0>, gs: &GridSpec, out: &mu
         return;
     }
     let g = normalize(g);
-    if let Err(e) = process_geometry(&g, full_grid, gs, k as i32, out, opts) {
+    if let Err(e) = process_geometry(&g, full_grid, k as i32, out, opts) {
         out.note(k, format!("error processing geometry: {e}"));
     }
 }
@@ -168,7 +167,7 @@ pub fn burn(geoms: &[Geometry], grid: &GridSpec, opts: impl Into<BurnOptions>) -
     let full_grid = grid.bounded();
     let mut out = BurnResult::default();
     for (k, g) in geoms.iter().enumerate() {
-        burn_one(g, k, &full_grid, grid, &mut out, &opts);
+        burn_one(g, k, &full_grid, &mut out, &opts);
     }
     Ok(out)
 }
@@ -189,7 +188,7 @@ where
             continue;
         }
         match parse_wkb(blob) {
-            Ok(g) => burn_one(&g, k, &full_grid, grid, &mut out, &opts),
+            Ok(g) => burn_one(&g, k, &full_grid, &mut out, &opts),
             Err(e) => out.note(k, format!("failed to parse WKB: {e}")),
         }
     }
