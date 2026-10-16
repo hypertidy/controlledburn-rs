@@ -15,6 +15,10 @@
   Carolina counties onto a rotated grid (#7), where Craven county lost
   two cells.
 
+  The book's one-degree world example was affected too: Canada lost five
+  cells on row 16, so that burn now has 1,266 runs instead of 1,265, and
+  `world-1deg.png` is regenerated.
+
 ## 0.2.1
 
 Bug fixes only; no public API changes. Output changes only where the
