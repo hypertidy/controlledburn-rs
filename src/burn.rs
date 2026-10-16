@@ -121,16 +121,24 @@ fn process_geometry(
     opts: &BurnOptions,
 ) -> Result<(), String> {
     let run_start = out.runs.len();
-    for poly in g.polygons() {
+    let polys = g.polygons();
+    for poly in polys {
         match opts.mode {
             BurnMode::Approx => process_polygon_approx(poly, gs, geom_id, &mut out.runs),
             BurnMode::Coverage => process_polygon(poly, full_grid, geom_id, &mut out.runs, &mut out.edges)?,
         }
-        if opts.coalesce_runs && out.runs.len() > run_start {
-            let mut tail = out.runs.split_off(run_start);
-            coalesce_sorted(&mut tail);
-            out.runs.extend(tail);
+    }
+    if opts.coalesce_runs && out.runs.len() > run_start {
+        // One polygon's runs come out of the sweep ordered by (row,
+        // col_start); a multipolygon's are in that order only per part, so
+        // sort them together first, or a later part's run left of an
+        // earlier part's on a shared row is swallowed by the merge.
+        let mut tail = out.runs.split_off(run_start);
+        if polys.len() > 1 {
+            tail.sort_by_key(|r| (r.row, r.col_start));
         }
+        coalesce_sorted(&mut tail);
+        out.runs.extend(tail);
     }
     for line in g.lines() {
         process_line(line, full_grid, geom_id, &mut out.lines)?;

@@ -55,7 +55,7 @@ let r = burn_wkb(countries.iter().copied(), &grid, BurnOptions::default()).unwra
 
 assert!(r.notes.is_empty());
 println!("{} runs, {} edges", r.runs.len(), r.edges.len());
-# assert_eq!(r.runs.len(), 1265);
+# assert_eq!(r.runs.len(), 1266);
 # assert_eq!(r.edges.len(), 9692);
 
 // Land fraction of the (unprojected) grid: about a third.
@@ -63,7 +63,7 @@ let land = r.covered_cells() / (360.0 * 180.0);
 assert!((land - 0.3316).abs() < 0.001);
 ```
 
-1,265 runs and 9,692 edges. Each record is 16 bytes, so the tables are
+1,266 runs and 9,692 edges. Each record is 16 bytes, so the tables are
 175 KB against 518 KB for a dense `f64` array. At this resolution the
 gain is modest, because nearly every land cell is a boundary cell.
 
@@ -101,7 +101,7 @@ for (ncol, runs, edges, sparse, dense) in &rows {
 
 | cell size | cells | runs | edges | tables | dense f64 | ratio |
 |---|---|---|---|---|---|---|
-| 1 degree | 64,800 | 1,265 | 9,692 | 0.2 MB | 0.5 MB | 3 |
+| 1 degree | 64,800 | 1,266 | 9,692 | 0.2 MB | 0.5 MB | 3 |
 | 0.1 degree | 6.5 million | 20,560 | 105,689 | 2.0 MB | 51.8 MB | 26 |
 | 0.01 degree | 648 million | 212,803 | 1,064,454 | 20.4 MB | 5,184 MB | 254 |
 

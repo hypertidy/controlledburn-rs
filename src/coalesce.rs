@@ -2,9 +2,10 @@
 //!
 //! The C++ sweep emits one `GridRun` per fully covered boundary cell and
 //! one per interior span between boundary cells, without merging
-//! neighbours. This pass merges them. It is applied to a polygon's runs
-//! after its sweep (runs from one polygon are emitted row by row, left to
-//! right) so a linear scan suffices; the general entry point sorts first.
+//! neighbours. This pass merges them. It is applied to a geometry's runs
+//! after its sweep. One polygon's runs are emitted row by row, left to
+//! right, so a linear scan suffices; a multipolygon's runs are sorted
+//! first, as are the general entry point's.
 
 use crate::output::GridRun;
 
