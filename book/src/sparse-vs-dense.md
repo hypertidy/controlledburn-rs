@@ -117,3 +117,9 @@ Code that consumes them at one degree consumes them at 0.01 degree
 unchanged, which is what makes them a reasonable interchange format for
 a rasterization service: the caller chooses the grid, and the cost of
 that choice stays proportional to the geometry.
+
+For the same argument made interactively, the storage section of
+[playproj: rasterize](https://hypertidy.github.io/playproj/rasterize.html) counts the
+bytes and the tiles a polygon touches for a dense mask, row runs, a
+bounding box of coverage fractions, and runs plus edge fractions (the
+runs and edges tables here).

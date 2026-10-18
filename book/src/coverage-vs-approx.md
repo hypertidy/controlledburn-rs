@@ -6,6 +6,11 @@ default) and `BurnMode::Approx` (a cell is inside iff its centre is,
 the rule GDAL and fasterize use). This chapter will put the two side by
 side on a coastline and show where and why they disagree.
 
+Until then, [playproj: rasterize](https://hypertidy.github.io/playproj/rasterize.html)
+shows the same comparison interactively in the browser: the centre-in
+rule and exact coverage fractions on world countries and coastlines,
+in several projections.
+
 ```rust
 # extern crate controlledburn;
 use controlledburn::{burn, BurnOptions, Coord, Geometry, GridSpec, Polygon};
