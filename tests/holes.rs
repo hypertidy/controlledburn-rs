@@ -48,3 +48,25 @@ fn two_holes_and_an_island_of_cells() {
     let want = area(&ext) - area(&h1) - area(&h2);
     assert!((r.covered_cells() - want).abs() < 1e-5, "covered {} of {want}", r.covered_cells());
 }
+
+#[test]
+fn many_holes_cover_their_area() {
+    // 20 x 20 diamond holes, none aligned with the grid. Also guards the
+    // per-row cost: the enclosing-ring sum must not loop over every ring
+    // for every boundary cell.
+    let ext = [(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0), (0.0, 0.0)];
+    let mut rings = vec![ring(&ext)];
+    let mut want = area(&ext);
+    for i in 0..20 {
+        for j in 0..20 {
+            let (cx, cy, r) = (2.5 + 5.0 * i as f64 + 0.013, 2.5 + 5.0 * j as f64 + 0.029, 1.7);
+            let h = [(cx - r, cy), (cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy)];
+            want -= area(&h);
+            rings.push(ring(&h));
+        }
+    }
+    let grid = GridSpec::new(0.0, 0.0, 100.0, 100.0, 333, 333);
+    let r = burn(&[Geometry::Polygon(Polygon::new(rings))], &grid, BurnOptions::coverage()).unwrap();
+    let got = r.covered_cells() * grid.dx() * grid.dy();
+    assert!((got - want).abs() < 1e-3, "covered {got} of {want}");
+}

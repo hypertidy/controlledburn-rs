@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **Coverage: holes removed too much area.** A cell crossed only by a
+  hole's boundary, inside the exterior, got the hole's negative fraction
+  alone and was dropped, instead of 1 minus the hole's fraction. A
+  9 x 9 square with a 1.6 x 1.6 hole covered 77 cells instead of 78.44;
+  on random valid polygons with holes, 98% had at least one wrong cell.
+  The row sweep now tracks winding per ring and adds the cover of every
+  ring that encloses a boundary cell without passing through it, kept
+  incrementally so the cost doesn't grow with the number of holes.
+  Polygons without holes are unchanged. The C++ core has the same bug
+  (hypertidy/controlledburn).
+
+## Unreleased
+
 - **Run coalescing dropped cells from multipolygons.** A multipolygon's
   runs were merged as if they were sorted by row and column, but they are
   only sorted within each part. When a later part had a run on a row to

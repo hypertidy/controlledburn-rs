@@ -238,6 +238,22 @@ pub(crate) fn process_polygon(
     let tol: f32 = 1e-6;
     let one_minus_tol: f32 = 1.0 - tol;
 
+    // Winding per ring, so a boundary cell gains the cover of rings that
+    // enclose it without passing through it (the exterior around a hole's
+    // boundary cell). Allocated once; each row resets only what it touched.
+    let mut ring_winding: Vec<i32> = vec![0; n_rings];
+    let mut touched: Vec<u32> = Vec::new();
+    // Rings passing through each merged cell, flat, with a span per cell.
+    let mut through: Vec<(u32, i32)> = Vec::new();
+    let mut spans: Vec<(usize, usize)> = Vec::new();
+    let sign = |r: u32| -> i32 {
+        if r == 0 {
+            1
+        } else {
+            -1
+        }
+    };
+
     for (sr, row_vec) in row_data.iter_mut().enumerate() {
         if row_vec.is_empty() {
             continue;
@@ -245,35 +261,41 @@ pub(crate) fn process_polygon(
         row_vec.sort_by_key(|r| r.col);
 
         // Merge same-column entries in push order (stable sort), keeping
-        // the rings that pass through each cell.
+        // the rings that pass through each cell (each ring once per cell).
         let mut merged: Vec<BoundaryCellRecord> = Vec::with_capacity(row_vec.len());
-        let mut through: Vec<Vec<(u32, i32)>> = Vec::with_capacity(row_vec.len());
+        through.clear();
+        spans.clear();
         for rec in row_vec.iter() {
             if let Some(last) = merged.last_mut() {
                 if last.col == rec.col {
                     last.coverage += rec.coverage;
                     last.winding_delta += rec.winding_delta;
-                    let t = through.last_mut().unwrap();
-                    match t.iter_mut().find(|(r, _)| *r == rec.ring) {
+                    let span = spans.last_mut().unwrap();
+                    match through[span.0..span.1].iter_mut().find(|(r, _)| *r == rec.ring) {
                         Some((_, d)) => *d += rec.winding_delta,
-                        None => t.push((rec.ring, rec.winding_delta)),
+                        None => {
+                            through.push((rec.ring, rec.winding_delta));
+                            span.1 += 1;
+                        }
                     }
                     continue;
                 }
             }
             merged.push(*rec);
-            through.push(vec![(rec.ring, rec.winding_delta)]);
+            spans.push((through.len(), through.len() + 1));
+            through.push((rec.ring, rec.winding_delta));
         }
 
         let mut winding: i32 = 0;
-        // Winding per ring, so a boundary cell gains the cover of rings
-        // that enclose it without passing through it (the exterior around
-        // a hole's boundary cell).
-        let mut ring_winding: Vec<i32> = vec![0; n_rings];
+        // Sum of sign(r) over rings with non-zero winding: +1 inside the
+        // exterior, -1 inside a hole. Kept up to date as windings change,
+        // so a cell costs only the rings through it, not all the rings.
+        let mut inside: i32 = 0;
         let mut prev_col: i64 = -2;
         let full_row = (row_off + sr) as i32;
 
-        for (mc, rings) in merged.iter().zip(&through) {
+        for (mc, &(s0, s1)) in merged.iter().zip(&spans) {
+            let rings = &through[s0..s1];
             // Interior run between the previous boundary cell and this one.
             // prev_col > -2 means at least one cell (including padding) seen.
             if winding != 0 && prev_col > -2 && mc.col > prev_col + 1 {
@@ -287,12 +309,8 @@ pub(crate) fn process_polygon(
 
             // +1 inside the exterior, -1 inside a hole, for rings that do
             // not pass through this cell
-            let enclosing: i32 = ring_winding
-                .iter()
-                .enumerate()
-                .filter(|&(r, &wr)| wr != 0 && !rings.iter().any(|&(t, _)| t == r as u32))
-                .map(|(r, _)| if r == 0 { 1 } else { -1 })
-                .sum();
+            let enclosing: i32 = inside
+                - rings.iter().filter(|&&(t, _)| ring_winding[t as usize] != 0).map(|&(t, _)| sign(t)).sum::<i32>();
             let w = if enclosing != 0 { mc.coverage + enclosing as f32 } else { mc.coverage };
             if w > tol && w < one_minus_tol {
                 edges.push(GridEdge { row: full_row, col: mc.col as i32, fraction: w, id: poly_id });
@@ -304,9 +322,21 @@ pub(crate) fn process_polygon(
             winding += mc.winding_delta;
             prev_col = mc.col;
             for &(r, d) in rings {
-                ring_winding[r as usize] += d;
+                let before = ring_winding[r as usize];
+                let after = before + d;
+                if before == 0 && after != 0 {
+                    inside += sign(r);
+                    touched.push(r);
+                } else if before != 0 && after == 0 {
+                    inside -= sign(r);
+                }
+                ring_winding[r as usize] = after;
             }
         }
+        for &r in &touched {
+            ring_winding[r as usize] = 0;
+        }
+        touched.clear();
     }
     Ok(())
 }
