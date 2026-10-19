@@ -23,6 +23,8 @@
 //!      cell untouched in coverage mode is not.
 //!   6. burning at 2x resolution and averaging 2x2 blocks equals burning at
 //!      1x (right in total but wrong in placement is still a failure).
+//!   7. for a two-part multipolygon, coalesced runs equal the parity runs
+//!      passed through `coalesce_runs`, whatever the order of the parts.
 //!
 //! Run a long campaign with
 //!   PROPTEST_CASES=20000 cargo test --test properties --release
@@ -493,5 +495,21 @@ proptest! {
             let got = m1[row * nc + col];
             prop_assert!((got - agg).abs() <= 2e-6, "row {row} col {col}: 1x {got} vs 2x aggregate {agg}\n{}\n{}", fmt_grid(&g), fmt_ring(&ring));
         } }
+    }
+
+    #[test]
+    fn multipolygon_coalescing_matches_post_pass(((g, a), (_, b)) in grid().prop_flat_map(|g| (ring_on(g.clone()), ring_on(g)))) {
+        let mp = Geometry::MultiPolygon(vec![
+            Polygon::new(vec![a.iter().map(|&p| Coord::from(p)).collect()]),
+            Polygon::new(vec![b.iter().map(|&p| Coord::from(p)).collect()]),
+        ]);
+        for mode in [BurnMode::Coverage, BurnMode::Approx] {
+            let got = burn(std::slice::from_ref(&mp), &g.spec, BurnOptions::default().with_mode(mode)).unwrap();
+            let par = burn(std::slice::from_ref(&mp), &g.spec, BurnOptions::parity(mode)).unwrap();
+            let mut want = par.runs.clone();
+            coalesce_runs(&mut want);
+            prop_assert_eq!(&got.runs, &want, "{:?} runs\n{}\n{}\n{}", mode, fmt_grid(&g), fmt_ring(&a), fmt_ring(&b));
+            prop_assert_eq!(&got.edges, &par.edges, "{:?} edges", mode);
+        }
     }
 }
