@@ -8,8 +8,9 @@
   one crossing the row centre up and the other down. It has zero coverage
   and zero net winding, so it got no boundary record, and the sweep filled
   it with the winding from its left: one whole cell too many. The cell now
-  always gets a boundary record, except where the ring only touches a
-  corner. Found on DEA Waterbodies on a 50 m grid; the minimal case
+  gets a boundary record whenever the ring passes through it, from one
+  point on its boundary to another (not for corner touches or zero-width
+  spikes, which enclose nothing). Found on DEA Waterbodies on a 50 m grid; the minimal case
   `POLYGON ((0 0, -2 5, 2 0, 1 0, 1 1, -1 3.5, 0 0.5, 0 0))` on unit cells
   covered 3.5 cells instead of 2.5. In parity mode, a zero-coverage cell
   inside the exterior on a hole's wall is now its own one-cell run, so
