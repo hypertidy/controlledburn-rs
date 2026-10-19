@@ -39,7 +39,7 @@ fn assert_tables_equal(case: &str, mode: &str, got: &BurnResult, want: &BurnResu
 #[test]
 fn golden_parity_both_modes() {
     let cases = load_golden();
-    assert_eq!(cases.len(), 26);
+    assert_eq!(cases.len(), 27);
     for c in &cases {
         let name = c["case"].as_str().unwrap();
         let g = golden_geometry(&c["geometry"]);
