@@ -46,6 +46,12 @@ both byte orders, Z/M skipped) goes through `burn_wkb`.
 Lines and points are unaffected by mode. `materialize` reduces a result
 into a dense `f64` buffer with fasterize-style pixel functions.
 
+[playproj: rasterize](https://hypertidy.github.io/playproj/rasterize.html) compares the
+two rules interactively in the browser, on world countries and
+coastlines in several projections, along with what each costs to store
+in tiles; its "runs of whole cells plus a list of edge fractions" is
+this crate's runs and edges tables.
+
 ## Features
 
 - `serde`: `Serialize`/`Deserialize` on the public types.
