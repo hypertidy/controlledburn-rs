@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **Coverage: a cell with edges only along its walls was filled.** With
+  lattice-aligned input (polygons traced from a raster at half the grid's
+  cell size, say), a cell can have polygon edges along both of its walls,
+  one crossing the row centre up and the other down. It has zero coverage
+  and zero net winding, so it got no boundary record, and the sweep filled
+  it with the winding from its left: one whole cell too many. The cell now
+  always gets a boundary record, except where the ring only touches a
+  corner. Found on DEA Waterbodies on a 50 m grid; the minimal case
+  `POLYGON ((0 0, -2 5, 2 0, 1 0, 1 1, -1 3.5, 0 0.5, 0 0))` on unit cells
+  covered 3.5 cells instead of 2.5. In parity mode, a zero-coverage cell
+  inside the exterior on a hole's wall is now its own one-cell run, so
+  the golden tables for `hole_ccw`, `hole_cw` and `nested_holes_multi`
+  split one run each (cell values unchanged, coalesced runs unchanged).
+  Same fix as the C++ core (hypertidy/controlledburn#29).
+
 - **Coverage: holes removed too much area.** A cell crossed only by a
   hole's boundary, inside the exterior, got the hole's negative fraction
   alone and was dropped, instead of 1 minus the hole's fraction. A
