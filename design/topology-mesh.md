@@ -6,6 +6,9 @@ arc-node topology, triangulations and silicate-style vertex and edge
 tables), and sets out what controlledburn could expose or accept if
 topology is made explicit.
 
+
+See `topology-context.md` for the surrounding software and tooling. 
+
 ## Summary
 
 - A regular grid is a quad mesh. Burning a polygon onto it is the
