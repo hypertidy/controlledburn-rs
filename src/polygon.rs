@@ -190,8 +190,6 @@ pub(crate) fn process_polygon(
     if exterior.len() < 4 {
         return Ok(());
     }
-    let dx = full_grid.dx();
-    let dy = full_grid.dy();
 
     // Region of interest: exterior envelope clipped to the grid.
     let env = ring_envelope(exterior);
@@ -203,15 +201,17 @@ pub(crate) fn process_polygon(
         return Ok(());
     }
 
-    let subgrid_bounded = full_grid.shrink_to_fit(&region)?;
+    let (subgrid_bounded, row_off, col_off) = full_grid.shrink_to_fit_with_offsets(&region)?;
     let subgrid = subgrid_bounded.make_infinite();
     if subgrid.is_empty() {
         return Ok(());
     }
     let sub_rows = subgrid.rows() - 2;
     let sub_cols = subgrid.cols() - 2;
-    let row_off = ((full_grid.ymax() - subgrid_bounded.ymax()) / dy).round() as usize;
-    let col_off = ((subgrid_bounded.xmin() - full_grid.xmin()) / dx).round() as usize;
+    // Offsets now come from the shrink itself; for a regular grid they
+    // must equal what the extents imply (the pre-seam computation).
+    debug_assert_eq!(row_off, ((full_grid.ymax() - subgrid_bounded.ymax()) / full_grid.dy()).round() as usize);
+    debug_assert_eq!(col_off, ((subgrid_bounded.xmin() - full_grid.xmin()) / full_grid.dx()).round() as usize);
 
     let mut row_data: Vec<Vec<BoundaryCellRecord>> = vec![Vec::new(); sub_rows];
     let n_rings = poly.rings.len();

@@ -140,30 +140,12 @@ fn point_location(bbox: &BBox, c: &Coord) -> Location {
 /// to the cell size; only degenerate near-edge vertices move, by less than
 /// 1e-9 of a cell.
 fn snap_to_lattice(coords: &mut [Coord], grid: &Grid<1>) {
-    let (dx, dy) = (grid.dx(), grid.dy());
-    if dx <= 0.0 || dy <= 0.0 || dx.is_nan() || dy.is_nan() {
-        return;
-    }
-    let (x0, x1, y0, y1) = (grid.xmin(), grid.xmax(), grid.ymin(), grid.ymax());
-    // padded grids carry one padding row/col on each side
-    let ncol = (grid.cols() - 2) as f64;
-    let nrow = (grid.rows() - 2) as f64;
-    let (tol_x, tol_y) = (dx * 1e-9, dy * 1e-9);
+    // Padding cells have no walls of their own, so the axes (which hold
+    // only the real cells) are the lattice.
+    let (xa, ya) = (grid.x_axis(), grid.y_axis());
     for c in coords.iter_mut() {
-        let kx = ((c.x - x0) / dx).round();
-        if kx >= 0.0 && kx <= ncol {
-            let bx = if kx == ncol { x1 } else { x0 + kx * dx };
-            if (c.x - bx).abs() <= tol_x {
-                c.x = bx;
-            }
-        }
-        let ky = ((y1 - c.y) / dy).round();
-        if ky >= 0.0 && ky <= nrow {
-            let by = if ky == nrow { y0 } else { y1 - ky * dy };
-            if (c.y - by).abs() <= tol_y {
-                c.y = by;
-            }
-        }
+        c.x = xa.snap(c.x);
+        c.y = ya.snap(c.y);
     }
 }
 

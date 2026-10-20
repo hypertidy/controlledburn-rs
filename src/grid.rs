@@ -9,6 +9,7 @@
 //!
 //! Row 0 is the TOP row (the `ymax` edge).
 
+use crate::axis::{Axis, Dir};
 use crate::ee::bbox::BBox;
 use crate::error::BurnError;
 
@@ -74,20 +75,38 @@ impl GridSpec {
 
 /// Port of `exactextract::Grid<extent_tag>`; `PAD` is the padding
 /// (0 = bounded_extent, 1 = infinite_extent).
+///
+/// Wall positions and index lookups go through the two [`Axis`] values,
+/// which is where non-regular grids will plug in. Padding stays here: it is
+/// the same for any axis.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Grid<const PAD: usize> {
+    x: Axis,
+    y: Axis,
     extent: BBox,
-    dx: f64,
-    dy: f64,
-    num_rows: usize,
-    num_cols: usize,
 }
 
 impl<const PAD: usize> Grid<PAD> {
     pub fn new(extent: BBox, dx: f64, dy: f64) -> Self {
-        let rows = if extent.ymax > extent.ymin { ((extent.ymax - extent.ymin) / dy).round() as usize } else { 0 };
-        let cols = if extent.xmax > extent.xmin { ((extent.xmax - extent.xmin) / dx).round() as usize } else { 0 };
-        Grid { extent, dx, dy, num_rows: 2 * PAD + rows, num_cols: 2 * PAD + cols }
+        Self::from_axes(
+            Axis::regular(extent.xmin, extent.xmax, dx, Dir::Ascending),
+            Axis::regular(extent.ymin, extent.ymax, dy, Dir::Descending),
+        )
+    }
+
+    fn from_axes(x: Axis, y: Axis) -> Self {
+        let extent = BBox::new(x.lo(), y.lo(), x.hi(), y.hi());
+        Grid { x, y, extent }
+    }
+
+    #[inline]
+    pub fn x_axis(&self) -> &Axis {
+        &self.x
+    }
+
+    #[inline]
+    pub fn y_axis(&self) -> &Axis {
+        &self.y
     }
 
     /// Column index for `x`. For the padded grid, values outside the extent
@@ -101,18 +120,18 @@ impl<const PAD: usize> Grid<PAD> {
                 return 0;
             }
             if x > self.extent.xmax {
-                return self.num_cols - 1;
+                return self.cols() - 1;
             }
             if x == self.extent.xmax {
-                return self.num_cols - 2;
+                return self.cols() - 2;
             }
         } else {
             debug_assert!(x >= self.extent.xmin && x <= self.extent.xmax, "x out of range");
             if x == self.extent.xmax {
-                return self.num_cols - 1;
+                return self.cols() - 1;
             }
         }
-        let raw = PAD + ((x - self.extent.xmin) / self.dx).floor() as usize;
+        let raw = PAD + self.x.units(x).floor() as usize;
         raw.min(self.get_column(self.extent.xmax))
     }
 
@@ -123,34 +142,34 @@ impl<const PAD: usize> Grid<PAD> {
                 return 0;
             }
             if y < self.extent.ymin {
-                return self.num_rows - 1;
+                return self.rows() - 1;
             }
             if y == self.extent.ymin {
-                return self.num_rows - 2;
+                return self.rows() - 2;
             }
         } else {
             debug_assert!(y >= self.extent.ymin && y <= self.extent.ymax, "y out of range");
             if y == self.extent.ymin {
-                return self.num_rows - 1;
+                return self.rows() - 1;
             }
         }
-        let raw = PAD + ((self.extent.ymax - y) / self.dy).floor() as usize;
+        let raw = PAD + self.y.units(y).floor() as usize;
         raw.min(self.get_row(self.extent.ymin))
     }
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.num_rows <= 2 * PAD && self.num_cols <= 2 * PAD
+        self.rows() <= 2 * PAD && self.cols() <= 2 * PAD
     }
 
     #[inline]
     pub fn rows(&self) -> usize {
-        self.num_rows
+        2 * PAD + self.y.n()
     }
 
     #[inline]
     pub fn cols(&self) -> usize {
-        self.num_cols
+        2 * PAD + self.x.n()
     }
 
     #[inline]
@@ -169,13 +188,15 @@ impl<const PAD: usize> Grid<PAD> {
     pub fn ymax(&self) -> f64 {
         self.extent.ymax
     }
+    /// Regular cell width; see [`Axis::step`].
     #[inline]
     pub fn dx(&self) -> f64 {
-        self.dx
+        self.x.step()
     }
+    /// Regular cell height; see [`Axis::step`].
     #[inline]
     pub fn dy(&self) -> f64 {
-        self.dy
+        self.y.step()
     }
     #[inline]
     pub fn extent(&self) -> &BBox {
@@ -183,80 +204,36 @@ impl<const PAD: usize> Grid<PAD> {
     }
 
     /// Shrink the grid to the smallest sub-grid (snapped to this grid's
-    /// cell boundaries) that contains `b`. Verbatim port of exactextract,
-    /// including its floating-point corrections. `b` must lie within the
-    /// extent.
+    /// cell boundaries) that contains `b`. Port of exactextract, including
+    /// its floating-point corrections, done one axis at a time (see
+    /// [`Axis::shrink`]). `b` must lie within the extent.
+    #[cfg(test)]
     pub fn shrink_to_fit(&self, b: &BBox) -> Result<Self, String> {
+        self.shrink_to_fit_with_offsets(b).map(|(g, _, _)| g)
+    }
+
+    /// As [`Grid::shrink_to_fit`], also returning the sub-grid's offsets
+    /// into this grid as `(row_off, col_off)`: the number of whole cells
+    /// between this grid's origin walls and the sub-grid's.
+    pub fn shrink_to_fit_with_offsets(&self, b: &BBox) -> Result<(Self, usize, usize), String> {
         let e = &self.extent;
         if b.xmin < e.xmin || b.ymin < e.ymin || b.xmax > e.xmax || b.ymax > e.ymax {
             return Err("Cannot shrink extent to bounds larger than original.".into());
         }
 
-        let mut col0 = self.get_column(b.xmin);
-        let mut row1 = self.get_row(b.ymax);
+        let col0 = self.get_column(b.xmin) - PAD;
+        let row1 = self.get_row(b.ymax) - PAD;
+        let col1 = self.get_column(b.xmax) - PAD;
+        let row0 = self.get_row(b.ymin) - PAD;
 
-        // Snap xmin and ymax to the upper-left corner of the supplied extent.
-        let mut snapped_xmin = e.xmin + (col0 - PAD) as f64 * self.dx;
-        let mut snapped_ymax = e.ymax - (row1 - PAD) as f64 * self.dy;
+        let (x, col_off) = self.x.shrink(col0, col1, b.xmin, b.xmax)?;
+        let (y, row_off) = self.y.shrink(row1, row0, b.ymin, b.ymax)?;
 
-        // Because of floating-point round-off the snapped corner may not
-        // actually contain the requested corner.
-        if b.xmin < snapped_xmin {
-            snapped_xmin -= self.dx;
-            col0 -= 1;
-        }
-        if b.ymax > snapped_ymax {
-            snapped_ymax += self.dy;
-            row1 -= 1;
-        }
-
-        let col1 = self.get_column(b.xmax);
-        let row0 = self.get_row(b.ymin);
-
-        let mut num_rows = 1 + (row0 - row1);
-        let mut num_cols = 1 + (col1 - col0);
-
-        // If xmax or ymin falls cleanly on a cell boundary we need one
-        // fewer row/column, because the rightmost cell is a closed interval
-        // in x and the lowermost cell a closed interval in y.
-        if num_rows > 2 && (snapped_ymax - (num_rows - 1) as f64 * self.dy <= b.ymin) {
-            num_rows -= 1;
-        }
-        if num_cols > 2 && (snapped_xmin + (num_cols - 1) as f64 * self.dx >= b.xmax) {
-            num_cols -= 1;
-        }
-
-        // Offsets relative to the new xmin/ymax origin, so that repeated
-        // shrink calls with the same inputs give the same result.
-        let mut reduced = BBox::new(
-            snapped_xmin,
-            (snapped_ymax - num_rows as f64 * self.dy).min(b.ymin),
-            (snapped_xmin + num_cols as f64 * self.dx).max(b.xmax),
-            snapped_ymax,
-        );
-
-        // Fudge the computed xmax and ymin, if needed, so the extent does
-        // not grow during a shrink.
-        if reduced.xmax > e.xmax {
-            if ((reduced.xmax - reduced.xmin) / self.dx).round() == ((e.xmax - reduced.xmin) / self.dx).round() {
-                reduced.xmax = e.xmax;
-            } else {
-                return Err("Shrink operation failed.".into());
-            }
-        }
-        if reduced.ymin < e.ymin {
-            if ((reduced.ymax - reduced.ymin) / self.dy).round() == ((reduced.ymax - e.ymin) / self.dy).round() {
-                reduced.ymin = e.ymin;
-            } else {
-                return Err("Shrink operation failed.".into());
-            }
-        }
-
-        let out = Grid::new(reduced, self.dx, self.dy);
+        let out = Self::from_axes(x, y);
         if b.xmin < out.xmin() || b.ymin < out.ymin() || b.xmax > out.xmax() || b.ymax > out.ymax() {
             return Err("Shrink operation failed.".into());
         }
-        Ok(out)
+        Ok((out, row_off, col_off))
     }
 }
 
@@ -266,16 +243,11 @@ impl Grid<0> {
     /// error in `xmin + n*dx` never loses part of the extent.
     #[allow(dead_code)]
     pub fn cell(&self, row: usize, col: usize) -> BBox {
-        BBox::new(
-            self.xmin() + col as f64 * self.dx,
-            if row == self.rows() - 1 { self.ymin() } else { self.ymax() - (row + 1) as f64 * self.dy },
-            if col == self.cols() - 1 { self.xmax() } else { self.xmin() + (col + 1) as f64 * self.dx },
-            self.ymax() - row as f64 * self.dy,
-        )
+        BBox::new(self.x.wall(col), self.y.wall(row + 1), self.x.wall(col + 1), self.y.wall(row))
     }
 
     pub fn make_infinite(&self) -> Grid<1> {
-        Grid::new(self.extent, self.dx, self.dy)
+        Grid::from_axes(self.x, self.y)
     }
 }
 
@@ -292,24 +264,24 @@ impl Grid<1> {
         } else if col == cols - 1 {
             self.xmax()
         } else {
-            self.xmin() + (col - 1) as f64 * self.dx
+            self.x.wall(col - 1)
         };
         let xmax = match cols - col {
             1 => f64::MAX,
             2 => self.xmax(),
-            _ => self.xmin() + col as f64 * self.dx,
+            _ => self.x.wall(col),
         };
         let ymax = if row == 0 {
             f64::MAX
         } else if row == rows - 1 {
             self.ymin()
         } else {
-            self.ymax() - (row - 1) as f64 * self.dy
+            self.y.wall(row - 1)
         };
         let ymin = match rows - row {
             1 => f64::MIN,
             2 => self.ymin(),
-            _ => self.ymax() - row as f64 * self.dy,
+            _ => self.y.wall(row),
         };
         BBox::new(xmin, ymin, xmax, ymax)
     }
