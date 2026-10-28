@@ -50,14 +50,8 @@ pub(crate) fn orient2d_sign(a: (f64, f64), b: (f64, f64), c: (f64, f64)) -> i32 
     if det < -bound {
         return -1;
     }
-    let prods = [
-        (b.0, c.1, 1.0),
-        (b.0, a.1, -1.0),
-        (a.0, c.1, -1.0),
-        (c.0, b.1, -1.0),
-        (c.0, a.1, 1.0),
-        (a.0, b.1, 1.0),
-    ];
+    let prods =
+        [(b.0, c.1, 1.0), (b.0, a.1, -1.0), (a.0, c.1, -1.0), (c.0, b.1, -1.0), (c.0, a.1, 1.0), (a.0, b.1, 1.0)];
     let mut e: [f64; 12] = [0.0; 12];
     let mut n = 0;
     for &(p, q, sgn) in &prods {

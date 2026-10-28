@@ -94,16 +94,16 @@ for (ncol, nrow) in [(360u32, 180u32), (3600, 1800), (36000, 18000)] {
 for (ncol, runs, edges, sparse, dense) in &rows {
     println!("{ncol:>6} cols: {runs:>7} runs {edges:>8} edges  {:>6.1} MB sparse  {:>7.1} MB dense", *sparse as f64 / 1e6, *dense as f64 / 1e6);
 }
-# assert_eq!(rows[2].1, 212803);
-# assert_eq!(rows[2].2, 1065317);
+# assert_eq!(rows[2].1, 212798);
+# assert_eq!(rows[2].2, 1065318);
 # assert!(rows[2].4 / rows[2].3 > 250);
 ```
 
 | cell size | cells | runs | edges | tables | dense f64 | ratio |
 |---|---|---|---|---|---|---|
 | 1 degree | 64,800 | 1,266 | 9,700 | 0.2 MB | 0.5 MB | 3 |
-| 0.1 degree | 6.5 million | 20,560 | 105,774 | 2.0 MB | 51.8 MB | 26 |
-| 0.01 degree | 648 million | 212,803 | 1,065,317 | 20.4 MB | 5,184 MB | 253 |
+| 0.1 degree | 6.5 million | 20,556 | 105,774 | 2.0 MB | 51.8 MB | 26 |
+| 0.01 degree | 648 million | 212,798 | 1,065,318 | 20.4 MB | 5,184 MB | 253 |
 
 The last row is the point. A 0.01-degree global grid is 648 million
 cells; as an `f64` array it is 5.2 GB and as `u8` it is still 648 MB,

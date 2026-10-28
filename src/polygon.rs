@@ -325,16 +325,7 @@ pub(crate) fn process_polygon(
         if ring.len() < 4 {
             continue;
         }
-        walk_ring(
-            ring.clone(),
-            is_ccw(ring),
-            r as u32,
-            &subgrid,
-            &mut row_data,
-            sub_rows,
-            sub_cols,
-            col_off,
-        )?;
+        walk_ring(ring.clone(), is_ccw(ring), r as u32, &subgrid, &mut row_data, sub_rows, sub_cols, col_off)?;
     }
 
     // Winding sweep per row.
