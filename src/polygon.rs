@@ -138,7 +138,7 @@ fn walk_ring(
     // the heights of the cells left of it in that row). See `green_fraction`.
     let mut left_dy: Vec<Vec<(usize, f64)>> = vec![Vec::new(); sub_rows];
     for cr in &cells.records {
-        if cr.row < 1 || cr.row - 1 >= sub_rows {
+        if cr.row < 1 || cr.row > sub_rows {
             continue;
         }
         let dy: f64 = cr

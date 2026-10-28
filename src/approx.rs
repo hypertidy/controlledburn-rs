@@ -61,9 +61,9 @@ pub(crate) fn orient2d_sign(a: (f64, f64), b: (f64, f64), c: (f64, f64)) -> i32 
             // grow-expansion: add t to e[..n], keeping components in
             // increasing magnitude
             let mut q = t;
-            for k in 0..n {
-                let (s, err) = two_sum(q, e[k]);
-                e[k] = err;
+            for ek in e.iter_mut().take(n) {
+                let (s, err) = two_sum(q, *ek);
+                *ek = err;
                 q = s;
             }
             e[n] = q;
