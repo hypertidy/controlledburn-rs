@@ -1,22 +1,50 @@
 # Changelog
 
-## Unreleased (0.2.2)
+## 0.2.3 (unreleased)
 
-- **`CoverageWindow` and `RowPrefix`: exact coverage and exact integrals
-  for small rings, without the traversal tables.** Both work in cell index
-  space and split each ring edge at cell walls. `CoverageWindow` books
-  each piece's area and height into a dense, reusable window and resolves
-  coverage with one prefix pass per row (the cell accumulation of
-  FreeType's "gray" rasteriser, kept exact). `RowPrefix` holds row prefix
-  sums of one or more fields, so that a ring's weighted sum is a boundary
-  integral: work proportional to the perimeter, and an edge shared by two
-  rings integrated once. They agree with `burn` in coverage mode to its
-  `f32` fractions (property-tested). Made for rwarp's exact footprint, one
-  small ring per destination pixel, where `burn`'s per-call setup and
-  per-cell records cost 1 to 2 microseconds a pixel; the window costs 0.2
-  to 0.5. See `src/window.rs` for the identity and a C++ port note.
+- **Coverage: cells overcounted where an edge passes exactly through a
+  cell corner, or where two edges nearly coincide** (#6). Found by the
+  property suite; the C++ core had the same bugs (hypertidy/controlledburn#25).
+  - An edge through a corner gave a crossing an ulp off the corner, and the
+    next cell a sliver traversal along its wall where the ring only touches
+    the corner. The walker now exits through the corner itself when the
+    crossing is within the lattice tolerance of it (1e-9 of a cell).
+  - A cell crossed by several traversals got its coverage from
+    exactextract's chain chaser, which depends on the order of the
+    traversal ends around the cell. Rounding can swap two nearly coincident
+    ends (that sliver, or the two edges of a ring doubling back along
+    itself), and the chaser then returns the complement: a whole cell too
+    much. Such cells now use Green's theorem, the identity behind
+    `CoverageWindow`: each traversal adds its own term, plus the cell
+    width times the covered length of the left wall, read from the
+    traversals to its left in the row. So does a single traversal lying
+    along the cell walls, which does not split the cell.
+  - A zero-width spike out to a corner vertex and back left a coverage of
+    1e-16 instead of 0, whose record blanked a fully covered cell. A
+    coverage below the sweep's 1e-6 tolerance now gets a record only when
+    the ring passes through the cell.
 
-## Unreleased
+  Before, three rings from #6 burned one cell each at 1.0 for 0.094, 0.739
+  for 0.455 and 0.839 or 1.0 (depending on the start vertex) for 0.339; a
+  sliver of area 4e-13 covered 7 to 11 whole cells at 2x resolution. On
+  `main`, every 100,000-case property run failed (20 of 20). The golden
+  table for `bowtie` gains six cells, along its closing edge on a column
+  wall: it covered 26 cells, now the exact 32. Every other golden table
+  is unchanged.
+
+- **Approx: a cell-centre tie decided by rounding** (#6). Which side of a
+  cell centre an edge passes is now an exact orientation test on the
+  edge's endpoints, not a comparison of the rounded intercept with the
+  centre. Two edges of a ring doubling back along a line both passed
+  1e-13 to the right of a centre, one intercept rounded onto it, the
+  left-inclusive rule counted it as left, and an empty cell burned.
+  Intercepts are now ordered by column and side of the centre. The
+  sliver above still burns two cells in approx mode: one centre is
+  strictly inside it and the other is on its edge, both checked in
+  rational arithmetic, so that is the centre rule's answer, not a tie.
+  The property "a cell untouched in coverage is absent in approx" now
+  exempts cells whose centre is within 1e-3 cells of an edge: coverage
+  drops fractions below 1e-6, so there both can be right.
 
 - **Coverage: a cell with edges only along its walls was filled.** With
   lattice-aligned input (polygons traced from a raster at half the grid's
@@ -34,6 +62,22 @@
   split one run each (cell values unchanged, coalesced runs unchanged).
   Same fix as the C++ core (hypertidy/controlledburn#29).
 
+## 0.2.2
+
+- **`CoverageWindow` and `RowPrefix`: exact coverage and exact integrals
+  for small rings, without the traversal tables.** Both work in cell index
+  space and split each ring edge at cell walls. `CoverageWindow` books
+  each piece's area and height into a dense, reusable window and resolves
+  coverage with one prefix pass per row (the cell accumulation of
+  FreeType's "gray" rasteriser, kept exact). `RowPrefix` holds row prefix
+  sums of one or more fields, so that a ring's weighted sum is a boundary
+  integral: work proportional to the perimeter, and an edge shared by two
+  rings integrated once. They agree with `burn` in coverage mode to its
+  `f32` fractions (property-tested). Made for rwarp's exact footprint, one
+  small ring per destination pixel, where `burn`'s per-call setup and
+  per-cell records cost 1 to 2 microseconds a pixel; the window costs 0.2
+  to 0.5. See `src/window.rs` for the identity and a C++ port note.
+
 - **Coverage: holes removed too much area.** A cell crossed only by a
   hole's boundary, inside the exterior, got the hole's negative fraction
   alone and was dropped, instead of 1 minus the hole's fraction. A
@@ -44,8 +88,6 @@
   incrementally so the cost doesn't grow with the number of holes.
   Polygons without holes are unchanged. The C++ core has the same bug
   (hypertidy/controlledburn).
-
-## Unreleased
 
 - **Run coalescing dropped cells from multipolygons.** A multipolygon's
   runs were merged as if they were sorted by row and column, but they are

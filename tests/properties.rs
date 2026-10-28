@@ -20,7 +20,9 @@
 //!      ring clipped to each cell, shoelace) on small grids; this localises
 //!      a failure to a cell where property 1 only reports a total.
 //!   5. a cell fully covered in coverage mode is in approx mode's runs and a
-//!      cell untouched in coverage mode is not.
+//!      cell untouched in coverage mode is not (unless its centre is within
+//!      1e-3 cells of the boundary, where coverage's 1e-6 drop tolerance
+//!      and the centre rule can both be right).
 //!   6. burning at 2x resolution and averaging 2x2 blocks equals burning at
 //!      1x (right in total but wrong in placement is still a failure).
 //!   7. for a two-part multipolygon, coalesced runs equal the parity runs
@@ -219,6 +221,14 @@ fn shoelace(r: &[(f64, f64)]) -> f64 {
 
 fn orient(p: (f64, f64), q: (f64, f64), r: (f64, f64)) -> f64 {
     (q.0 - p.0) * (r.1 - p.1) - (q.1 - p.1) * (r.0 - p.0)
+}
+
+/// Distance from `p` to the segment `a b`.
+fn seg_dist(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let l2 = dx * dx + dy * dy;
+    let t = if l2 > 0.0 { (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0) } else { 0.0 };
+    (p.0 - a.0 - t * dx).hypot(p.1 - a.1 - t * dy)
 }
 
 fn on_segment(p: (f64, f64), q: (f64, f64), r: (f64, f64)) -> bool {
@@ -472,11 +482,25 @@ proptest! {
     fn approx_agrees_with_coverage_on_full_and_empty_cells((g, ring) in ring()) {
         let cov = cover(&burn1(&ring, &g, BurnOptions::default()), &g);
         let apx = cover(&burn1(&ring, &g, BurnOptions::approx()), &g);
+        // Coverage drops fractions below 1e-6, approx tests a point. A cell
+        // whose centre is inside the ring but which is covered less than
+        // 1e-6 must have its centre within sqrt(1e-6 / pi) ~ 5.6e-4 cells of
+        // the boundary (else a disc that size around it would be covered):
+        // a sliver, or a ring doubling back along itself, can hold a centre
+        // strictly inside, exactly, and burn that cell in approx with
+        // nothing in coverage (controlledburn-rs#6). The "untouched" half
+        // does not apply to such cells.
+        let (nc, e, res) = (g.ncol(), g.ext(), g.res());
+        let near_boundary = |i: usize| {
+            let (row, col) = (i / nc, i % nc);
+            let p = (e.xmin + (col as f64 + 0.5) * res, e.ymax - (row as f64 + 0.5) * res);
+            ring.windows(2).any(|w| seg_dist(p, w[0], w[1]) <= 1e-3 * res)
+        };
         for (i, (c, a)) in cov.iter().zip(&apx).enumerate() {
             if *c >= 1.0 - 1e-6 {
                 prop_assert!(*a > 0.0, "cell {i} fully covered but absent in approx\n{}\n{}", fmt_grid(&g), fmt_ring(&ring));
             }
-            if *c == 0.0 {
+            if *c == 0.0 && !near_boundary(i) {
                 prop_assert!(*a == 0.0, "cell {i} untouched in coverage but present in approx\n{}\n{}", fmt_grid(&g), fmt_ring(&ring));
             }
         }

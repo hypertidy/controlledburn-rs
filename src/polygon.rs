@@ -8,7 +8,6 @@
 
 use crate::coverage::{analytical_covered_fraction, closed_ring_covered_fraction};
 use crate::ee::bbox::BBox;
-use crate::ee::traversal_areas::{left_hand_area_with, Scratch};
 use crate::geometry::{is_ccw, Coord, Polygon};
 use crate::grid::Grid;
 use crate::output::{GridEdge, GridRun};
@@ -49,6 +48,60 @@ pub(crate) fn ring_envelope(ring: &[Coord]) -> BBox {
     BBox::new(xmin, ymin, xmax, ymax)
 }
 
+/// A traversal that counts: a proper entry and exit with movement, or a
+/// closed ring entirely within the cell.
+#[inline]
+fn is_valid(t: &Traversal, arena: &[Coord]) -> bool {
+    (t.traversed() && t.multiple_unique_coordinates(arena)) || (t.entry.is_none() && t.is_closed_ring(arena))
+}
+
+/// Whether every segment of `tc` runs along a wall of `bbox`. Such a
+/// traversal does not split the cell: whether the cell is covered depends
+/// on the rest of the ring (`green_fraction` reads it from the row). The
+/// single-traversal formula would take the side left of travel, all of the
+/// cell or none of it. A ring doubling back along a wall puts the two
+/// directions in different cells as the walk happens to run, the grid
+/// cell and the padding row below it say, and the grid cell came out fully
+/// covered (controlledburn-rs#6).
+fn along_walls(bbox: &BBox, tc: &[Coord]) -> bool {
+    tc.windows(2).all(|s| {
+        let (a, b) = (s[0], s[1]);
+        (a.x == b.x && (a.x == bbox.xmin || a.x == bbox.xmax)) || (a.y == b.y && (a.y == bbox.ymin || a.y == bbox.ymax))
+    })
+}
+
+/// Coverage fraction of a cell crossed by several traversals of one CCW
+/// ring, by Green's theorem: the covered area is the sum over the
+/// traversals of the integral of `(x - xmax) dy`, plus the width times the
+/// covered length of the left wall, which is minus `left_dy`, the net
+/// height of the ring's traversals left of the cell in the same row.
+///
+/// Every traversal adds its own term, so the result does not depend on
+/// the order of the traversal ends around the cell boundary. The chain
+/// chaser this replaces (exactextract's `left_hand_area`) did: two nearly
+/// coincident traversals (a sliver, or an edge doubling back along
+/// itself) can cross a wall an ulp apart in the wrong order, and the
+/// chaser then returned the complement of the sliver, a whole cell too
+/// much (controlledburn-rs#6). This is the identity `CoverageWindow` uses,
+/// applied to the walker's traversals.
+fn green_fraction(bbox: &BBox, lists: &[&[Coord]], left_dy: f64) -> f64 {
+    let (w, h) = (bbox.width(), bbox.height());
+    if !(w > 0.0 && h > 0.0) {
+        return 0.0;
+    }
+    let mut a = 0.0;
+    for tc in lists {
+        for s in tc.windows(2) {
+            let xm = 0.5 * ((s[0].x - bbox.xmax) + (s[1].x - bbox.xmax));
+            a += xm * (s[1].y - s[0].y);
+        }
+    }
+    // Magnitude, as in the single-traversal formula: a lobe of a
+    // self-intersecting ring that runs clockwise after normalisation is
+    // still covered under the non-zero winding rule.
+    ((a - w * left_dy) / (w * h)).abs().min(1.0)
+}
+
 /// Walk one ring and add its boundary-cell coverage and winding deltas
 /// to `row_data` (indexed by sub-grid row).
 #[allow(clippy::too_many_arguments)]
@@ -61,7 +114,6 @@ fn walk_ring(
     sub_rows: usize,
     sub_cols: usize,
     col_off: usize,
-    scratch: &mut Scratch,
 ) -> Result<(), String> {
     if coords.len() < 4 {
         return Ok(());
@@ -73,11 +125,42 @@ fn walk_ring(
     let is_exterior = ring == 0;
     let coverage_factor: f32 = if is_exterior { 1.0 } else { -1.0 };
     let winding_factor: i32 = if is_exterior { 1 } else { -1 };
+    // the sweep's tolerance on a cell's coverage (`process_polygon`)
+    let tol: f32 = 1e-6;
 
     let cells = walk_polyline(coords, grid, true)?;
     let arena = cells.coords.as_slice();
     let mut valid: Vec<&Traversal> = Vec::with_capacity(8);
     let mut lists: Vec<&[Coord]> = Vec::with_capacity(8);
+
+    // Net height of the ring's traversals in each cell, by row, then
+    // summed from the left: `left_dy[sub_r]` holds (padded column, sum of
+    // the heights of the cells left of it in that row). See `green_fraction`.
+    let mut left_dy: Vec<Vec<(usize, f64)>> = vec![Vec::new(); sub_rows];
+    for cr in &cells.records {
+        if cr.row < 1 || cr.row - 1 >= sub_rows {
+            continue;
+        }
+        let dy: f64 = cr
+            .traversals
+            .iter()
+            .filter(|t| is_valid(t, arena) && t.traversed())
+            .map(|t| {
+                let tc = t.coords(arena);
+                tc[tc.len() - 1].y - tc[0].y
+            })
+            .sum();
+        left_dy[cr.row - 1].push((cr.col, dy));
+    }
+    for row in &mut left_dy {
+        row.sort_unstable_by_key(|e| e.0);
+        let mut acc = 0.0;
+        for e in row.iter_mut() {
+            let dy = e.1;
+            e.1 = acc;
+            acc += dy;
+        }
+    }
 
     for cr in &cells.records {
         let (r, c) = (cr.row, cr.col);
@@ -105,9 +188,7 @@ fn walk_ring(
         // Valid traversals: proper enter + exit with movement, or a closed
         // ring entirely within this cell.
         valid.clear();
-        valid.extend(cr.traversals.iter().filter(|t| {
-            (t.traversed() && t.multiple_unique_coordinates(arena)) || (t.entry.is_none() && t.is_closed_ring(arena))
-        }));
+        valid.extend(cr.traversals.iter().filter(|t| is_valid(t, arena)));
         if valid.is_empty() {
             continue;
         }
@@ -117,15 +198,15 @@ fn walk_ring(
         if in_grid_cols {
             if valid.len() == 1 && valid[0].entry.is_none() && valid[0].is_closed_ring(arena) {
                 frac = closed_ring_covered_fraction(&cr.bbox, valid[0].coords(arena)) as f32;
-            } else if valid.len() == 1 {
+            } else if valid.len() == 1 && !along_walls(&cr.bbox, valid[0].coords(arena)) {
                 frac = analytical_covered_fraction(&cr.bbox, valid[0].coords(arena)) as f32;
             } else {
+                // several traversals, or one along the walls
                 lists.clear();
                 lists.extend(valid.iter().map(|t| t.coords(arena)));
-                let cell_area = cr.bbox.area();
-                if cell_area > 0.0 {
-                    frac = (left_hand_area_with(&cr.bbox, &lists, scratch) / cell_area) as f32;
-                }
+                let row = &left_dy[sub_r];
+                let left = row[row.partition_point(|e| e.0 < c)].1;
+                frac = green_fraction(&cr.bbox, &lists, left) as f32;
             }
         }
 
@@ -143,9 +224,15 @@ fn walk_ring(
         // and zero net winding, one crossing on each wall cancelling, and
         // the cell was filled as interior. A traversal that leaves where it
         // entered (touching a corner, or a zero-width spike in and back out)
-        // encloses nothing, and its zero coverage says nothing about the
-        // cell: no record, the sweep fills it from the winding.
-        let passes_through = frac == 0.0 && in_grid_cols && {
+        // encloses nothing, and its coverage says nothing about the cell:
+        // no record, the sweep fills it from the winding. That holds for
+        // coverage that is zero only up to rounding, too: a spike out to a
+        // corner vertex and back can return an ulp from where it entered,
+        // with a coverage of 1e-16, and that record kept a fully covered
+        // cell empty (controlledburn-rs#6). Below the sweep's tolerance
+        // such a record can only blank the cell, so it needs a pass-through.
+        let tiny = frac.abs() < tol;
+        let passes_through = tiny && in_grid_cols && {
             let tol_x = (cr.bbox.xmax - cr.bbox.xmin) * 1e-9;
             let tol_y = (cr.bbox.ymax - cr.bbox.ymin) * 1e-9;
             valid.iter().any(|t| {
@@ -154,7 +241,7 @@ fn walk_ring(
                 (a.x - b.x).abs() > tol_x || (a.y - b.y).abs() > tol_y
             })
         };
-        if frac != 0.0 || passes_through {
+        if !tiny || passes_through {
             row_vec.push(BoundaryCellRecord {
                 col: full_col,
                 coverage: coverage_factor * frac,
@@ -233,7 +320,6 @@ pub(crate) fn process_polygon(
 
     let mut row_data: Vec<Vec<BoundaryCellRecord>> = vec![Vec::new(); sub_rows];
     let n_rings = poly.rings.len();
-    let mut scratch = Scratch::default();
 
     for (r, ring) in poly.rings.iter().enumerate() {
         if ring.len() < 4 {
@@ -248,7 +334,6 @@ pub(crate) fn process_polygon(
             sub_rows,
             sub_cols,
             col_off,
-            &mut scratch,
         )?;
     }
 
