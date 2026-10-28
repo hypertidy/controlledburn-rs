@@ -266,7 +266,7 @@ mod tests {
         for i in 0..64 {
             for j in 0..64 {
                 let c = (0.5 + i as f64 * ulp, 0.5 + j as f64 * ulp);
-                let want = (j as i32 - i as i32).signum();
+                let want = (j - i).signum();
                 assert_eq!(orient2d_sign((12.0, 12.0), (24.0, 24.0), c), want, "{i} {j}");
             }
         }
