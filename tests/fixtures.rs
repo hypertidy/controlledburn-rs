@@ -37,7 +37,7 @@ fn parity_fixtures() {
     let geoms = read_csv("geometries.csv");
     let expected: HashMap<String, HashMap<String, String>> =
         read_csv("expected.csv").into_iter().map(|r| (r["case"].clone(), r)).collect();
-    assert_eq!(geoms.len(), 13);
+    assert_eq!(geoms.len(), 14);
 
     for g in &geoms {
         let case = &g["case"];

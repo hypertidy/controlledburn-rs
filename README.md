@@ -77,7 +77,7 @@ this crate's runs and edges tables.
 
 `tests/golden.rs` compares every output table, in order, against
 `fixtures/controlledburn-golden.json`, which was dumped from the C++
-build for 28 cases (the 13 shared cross-language fixtures plus 15
+build for 31 cases (the 14 shared cross-language fixtures plus 17
 edge-case probes) in both modes. Edge fractions and line lengths are
 compared as f32 bit patterns. `tests/fixtures.rs` runs the shared
 aggregate contract from `fixtures/{geometries,expected}.csv`.

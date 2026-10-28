@@ -339,3 +339,226 @@ fn invalid_grids_are_rejected() {
     // a huge but representable span is still fine
     assert!(GridSpec::new(-1e307, 0., 1e307, 4., 4, 4).validate().is_ok());
 }
+
+/// Dense cover from the tables and from `CoverageWindow` (exact), for a
+/// single ring; returns the worst cell as (row, col, burned, exact).
+fn worst_cell_vs_window(ring: &[(f64, f64)], g: &GridSpec) -> (usize, usize, f64, f64) {
+    let e = g.extent();
+    let (nc, nr) = (g.ncol as usize, g.nrow as usize);
+    let (dx, dy) = (g.dx(), g.dy());
+    let n = ring.len() - 1;
+    let xs: Vec<f64> = ring[..n].iter().map(|p| (p.0 - e.xmin) / dx).collect();
+    let ys: Vec<f64> = ring[..n].iter().map(|p| (e.ymax - p.1) / dy).collect();
+    let mut w = CoverageWindow::default();
+    w.reset(0, 0, nc, nr);
+    w.add_ring(&xs, &ys, 1.0);
+    let exact = w.resolve().to_vec();
+    let r = burn(&[poly(vec![ring.to_vec()])], g, BurnOptions::default()).unwrap();
+    assert!(r.notes.is_empty(), "{:?}", r.notes);
+    let mut m = vec![0.0; nc * nr];
+    for x in &r.runs {
+        for c in x.col_start..x.col_end {
+            m[x.row as usize * nc + c as usize] += 1.0;
+        }
+    }
+    for x in &r.edges {
+        m[x.row as usize * nc + x.col as usize] += x.fraction as f64;
+    }
+    let i = (0..nc * nr).max_by(|&a, &b| (m[a] - exact[a]).abs().total_cmp(&(m[b] - exact[b]).abs())).unwrap();
+    (i / nc, i % nc, m[i], exact[i])
+}
+
+fn assert_exact_every_start(ring: &[(f64, f64)], g: &GridSpec) {
+    let n = ring.len() - 1;
+    for reverse in [false, true] {
+        for k in 0..n {
+            let mut r: Vec<(f64, f64)> = (0..n).map(|i| ring[(i + k) % n]).collect();
+            if reverse {
+                r.reverse();
+            }
+            r.push(r[0]);
+            let (row, col, got, want) = worst_cell_vs_window(&r, g);
+            assert!(
+                (got - want).abs() <= 2e-6,
+                "start {k}, reversed {reverse}: row {row} col {col} burned {got} vs exact {want}"
+            );
+        }
+    }
+}
+
+#[test]
+fn edge_exactly_through_a_cell_corner_is_not_overcounted() {
+    // controlledburn-rs#6 / controlledburn#25, from the property suite.
+    // Each ring has an edge through a cell corner. The crossing came out an
+    // ulp or two off the corner, the next cell got a sliver traversal along
+    // its wall where the ring only touches the corner, and the chain chaser
+    // read the sliver as a slab of the cell (or all of it).
+
+    // (12.6, 1.4) -> (13.65, 0.35) passes through the top-right corner
+    // (13.3, 0.7) of row 12 col 18: burned 1.0, exact 0.0943.
+    assert_exact_every_start(
+        &[
+            (13.49307281327689, 0.280951025273552),
+            (13.774064548591133, 0.1953615710514231),
+            (14.150447247739818, 0.19536157105142304),
+            (14.454947247739819, 0.2945346261241548),
+            (14.571255898165475, 0.455),
+            (14.454947247739819, 0.6154653738758452),
+            (17.207761779641103, 4.932666216410308),
+            (12.6, 1.4000000000000004),
+            (13.649999999999999, 0.34999999999999964),
+            (6.0614012054372814, 0.45500000000000046),
+            (13.49307281327689, 0.280951025273552),
+        ],
+        &GridSpec::new(0.0, 0.0, 20.299999999999997, 9.1, 29, 13),
+    );
+    // (8.3, 10.4) -> (12.05, 6.65) passes through the corner (10.8, 7.9)
+    // of row 4 col 4: burned 0.739, exact 0.455.
+    assert_exact_every_start(
+        &[
+            (2.9404541633227357, 6.235726447802992),
+            (7.140490483291759, -0.6880522184656641),
+            (12.79922599805937, 6.649999999999999),
+            (13.222799970968294, 7.999704574445243),
+            (12.79922599805937, 8.351528741555857),
+            (8.3, 10.399999999999999),
+            (12.05, 6.649999999999999),
+            (2.9404541633227357, 6.235726447802992),
+        ],
+        &GridSpec::new(-1.7, 2.9, 35.8, 17.9, 15, 6),
+    );
+    // (0.371, 0.8) -> (0.229, 0.657) passes through the corner (0.3, 0.729)
+    // of row 3 col 0 on the grid's left edge: burned 0.839 or 1.0
+    // depending on the start vertex, exact 0.339.
+    assert_exact_every_start(
+        &[
+            (0.22857142857142856, 0.657142857142857),
+            (0.3, 0.7285714285714284),
+            (0.5385327833222915, 0.5669218770762636),
+            (0.3826046772369731, 0.8968780211084503),
+            (0.44285714285714284, 0.9150607669103901),
+            (0.6141351860119378, 1.2110801232422874),
+            (0.3, 0.9407750526246758),
+            (0.37142857142857144, 0.7999999999999999),
+            (0.22857142857142856, 0.657142857142857),
+        ],
+        &GridSpec::new(0.3, 0.3, 1.0142857142857142, 1.157142857142857, 5, 6),
+    );
+}
+
+#[test]
+fn near_coincident_edges_of_a_sliver_cover_nothing() {
+    // controlledburn-rs#6, second case: three almost collinear lattice
+    // points, area 4e-13. At 2x resolution its two long edges cross cell
+    // walls an ulp apart in the wrong order, and the chain chaser returned
+    // the complement of the sliver: 7 whole cells.
+    let ring = [
+        (1008.7666666666667, -2000.7),
+        (1003.7666666666667, -1999.7),
+        (1002.1, -1999.3666666666666),
+        (1008.7666666666667, -2000.7),
+    ];
+    for k in [1u32, 2, 3, 4] {
+        let g = GridSpec::new(1000.1, -2000.7, 1009.7666666666667, -1998.0333333333333, 29 * k, 8 * k);
+        let r = burn(&[poly(vec![ring.to_vec()])], &g, BurnOptions::default()).unwrap();
+        assert!(r.covered_cells() < 1e-5, "{k}x: covered {} cells", r.covered_cells());
+        assert_exact_every_start(&ring, &g);
+    }
+    // Approx mode is the centre rule, exactly: the centre of row 4 col 8 is
+    // strictly inside this ring (checked in rational arithmetic) and the
+    // centre of row 6 col 18 lies on its edge, inside by the left-inclusive
+    // rule. Both cells burn; see the CHANGELOG for why that stays.
+    let g = GridSpec::new(1000.1, -2000.7, 1009.7666666666667, -1998.0333333333333, 29, 8);
+    let r = burn(&[poly(vec![ring.to_vec()])], &g, BurnOptions::approx()).unwrap();
+    let cells: Vec<(i32, i32)> =
+        r.runs.iter().flat_map(|x| (x.col_start..x.col_end).map(move |c| (x.row, c))).collect();
+    assert_eq!(cells, vec![(4, 8), (6, 18)]);
+}
+
+#[test]
+fn approx_centre_tie_is_decided_exactly() {
+    // From the property suite: the ring runs out along the line y = x - 3001.1
+    // and back along it, and both edges pass the centre of row 13 col 2,
+    // (1000.85, -2000.25), within 1.2e-13 on its right (exact rational
+    // arithmetic). One rounded intercept came out exactly 1000.85, counted
+    // as left of the centre by the left-inclusive rule, and the cell burned
+    // with nothing in it.
+    let g = GridSpec::new(1000.1, -2000.7, 1002.8000000000001, -1996.2, 9, 15);
+    let ring = vec![
+        (1000.4, -2000.7),
+        (1001.3000000000001, -1999.8000000000002),
+        (1001.293897355882, -1999.95),
+        (1001.3511730051581, -1999.8000000000002),
+        (1002.0812267040778, -1999.6101141954598),
+        (1002.398382455067, -1997.7693056968183),
+        (1001.293897355882, -1999.4751141954598),
+        (1001.45, -1999.65),
+        (1000.4, -2000.7),
+    ];
+    for reverse in [false, true] {
+        let mut r = ring.clone();
+        if reverse {
+            r.reverse();
+        }
+        let res = burn(&[poly(vec![r])], &g, BurnOptions::approx()).unwrap();
+        assert!(!res.runs.iter().any(|x| x.row == 13 && x.col_start <= 2 && x.col_end > 2), "{:?}", res.runs);
+    }
+}
+
+#[test]
+fn spike_to_a_corner_and_walls_traced_both_ways_stay_exact() {
+    // More of controlledburn-rs#6, from the property suite at 100,000 cases.
+
+    // A zero-width spike runs up to the top-left corner (0.2, 0.35) of row
+    // 25 col 4 and straight back, returning an ulp from where it entered.
+    // Its coverage came out 3e-16 instead of 0; that record blocked the
+    // interior fill and the cell, fully covered, burned 0.
+    assert_exact_every_start(
+        &[
+            (0.09000464930083663, 0.2951258728043881),
+            (0.225, 0.2749999999999999),
+            (0.2, 0.3500000000000001),
+            (0.275, 0.125),
+            (0.25, 0.44999999999999996),
+            (0.2279343842256219, 0.4548286815756889),
+            (0.22617971754901423, 0.4856824868406428),
+            (0.22173674555812387, 0.5020994537202749),
+            (0.2166843842256219, 0.49639790095734193),
+            (0.09000464930083663, 0.2951258728043881),
+        ],
+        &GridSpec::new(0.0, 0.0, 0.25, 1.6, 5, 32),
+    );
+    // A triangle hanging below the grid traces part of the grid's bottom
+    // edge out and back. From this start vertex the walk put one direction
+    // in the bottom row and the other in the padding row below it; each
+    // bottom-row cell then had a single traversal along its wall, which the
+    // single-traversal formula read as the whole cell. Row 4 cols 17 and 18
+    // burned 1, exact 0.
+    assert_exact_every_start(
+        &[
+            (2.837265806357478, 0.30000000000000004),
+            (3.014285714285714, 0.30000000000000004),
+            (3.0402714541578892, 0.22857142857142854),
+            (2.9374143113007465, 0.3),
+            (2.837265806357478, 0.30000000000000004),
+        ],
+        &GridSpec::new(0.3, 0.3, 3.728571428571428, 1.0142857142857142, 24, 5),
+    );
+    // From CI on #17: an edge along lattice diagonals through the grid's
+    // top-right corner. Row 2 col 9 burned as fully covered (exact 0.146),
+    // so approx_agrees_with_coverage reported it missing from approx.
+    let ring = [
+        (-178.8212054697768, -87.7088728160751),
+        (-178.7142857142857, -87.71428571428572),
+        (-178.28571428571428, -87.28571428571429),
+        (-178.64285714285714, -87.64285714285715),
+        (-178.8212054697768, -87.61314778927319),
+        (-178.8212054697768, -87.7088728160751),
+    ];
+    let g = GridSpec::new(-180.0, -90.0, -178.42857142857142, -87.28571428571429, 11, 19);
+    assert_exact_every_start(&ring, &g);
+    // Its centre is the vertex (-178.643, -87.643): inside by the
+    // left-inclusive rule, so approx burns it.
+    let r = burn(&[poly(vec![ring.to_vec()])], &g, BurnOptions::approx()).unwrap();
+    assert!(r.runs.iter().any(|x| x.row == 2 && x.col_start <= 9 && x.col_end > 9));
+}

@@ -167,6 +167,28 @@ fn snap_to_lattice(coords: &mut [Coord], grid: &Grid<1>) {
     }
 }
 
+/// Move `c` (on the boundary of `bbox`) onto the corner of `bbox` it lies
+/// within `tol_x`, `tol_y` of, if any. Corners of padding cells are at
+/// `f64::MIN`/`f64::MAX` and are never within tolerance.
+#[inline]
+fn snap_to_corner(c: Coord, bbox: &BBox, tol_x: f64, tol_y: f64) -> Coord {
+    let x = if (c.x - bbox.xmin).abs() <= tol_x {
+        bbox.xmin
+    } else if (c.x - bbox.xmax).abs() <= tol_x {
+        bbox.xmax
+    } else {
+        return c;
+    };
+    let y = if (c.y - bbox.ymin).abs() <= tol_y {
+        bbox.ymin
+    } else if (c.y - bbox.ymax).abs() <= tol_y {
+        bbox.ymax
+    } else {
+        return c;
+    };
+    Coord::new(x, y)
+}
+
 pub(crate) fn walk_polyline(mut coords: Vec<Coord>, grid: &Grid<1>, closed: bool) -> Result<Cells, String> {
     let mut cells = Cells::default();
     if coords.is_empty() {
@@ -185,6 +207,9 @@ pub(crate) fn walk_polyline(mut coords: Vec<Coord>, grid: &Grid<1>, closed: bool
     let mut last: Option<((usize, usize), usize)> = None;
     let n_rows = grid.rows();
     let n_cols = grid.cols();
+    // Same tolerance as `snap_to_lattice`, from the grid's cell size (a
+    // padding cell's box is unbounded).
+    let (tol_x, tol_y) = (grid.dx() * 1e-9, grid.dy() * 1e-9);
 
     let mut pos: usize = 0;
     let mut row = grid.get_row(coords[0].y);
@@ -263,6 +288,18 @@ pub(crate) fn walk_polyline(mut coords: Vec<Coord>, grid: &Grid<1>, closed: bool
                         };
                     }
                 }
+                // Corner guard: an edge through a cell corner gives a
+                // crossing an ulp or two off the corner, on the wall
+                // either side of it. The next cell then starts a sliver
+                // traversal from there to the corner, or from the corner
+                // to a point an ulp down the wall, where the true path
+                // only touches the corner. Its two ends can be out of
+                // order around the cell boundary, which the old chain
+                // chaser read as a slab of the cell or all of it
+                // (controlledburn-rs#6). Exit through the corner itself;
+                // the sliver becomes a single-point touch, which the
+                // coverage pass already ignores.
+                exit_c = snap_to_corner(exit_c, &bbox, tol_x, tol_y);
                 arena.push(exit_c);
                 trav.len += 1;
                 trav.exit = Some(exit_s);

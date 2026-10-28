@@ -1,6 +1,6 @@
 [package]
 name = "controlledburn"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 rust-version = "1.70"
 license = "Apache-2.0"
@@ -35,7 +35,9 @@ geo-types = { version = "0.7", optional = true }
 all-features = true
 
 [dev-dependencies]
-serde_json = "1"
+# float_roundtrip: parse the golden coordinates exactly (the default parser
+# can be an ulp off, and lattice cases are decided by single ulps)
+serde_json = { version = "1", features = ["float_roundtrip"] }
 proptest = "1"
 plotters = { version = "0.3", default-features = false, features = ["bitmap_backend", "bitmap_encoder"] }
 criterion = { version = "0.5", default-features = false }
