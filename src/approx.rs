@@ -263,7 +263,7 @@ mod tests {
         // against the line through (12, 12) and (24, 24); the sign is that
         // of y - x, exactly.
         let ulp = 2f64.powi(-53);
-        for i in 0..64 {
+        for i in 0..64i32 {
             for j in 0..64 {
                 let c = (0.5 + i as f64 * ulp, 0.5 + j as f64 * ulp);
                 let want = (j - i).signum();
