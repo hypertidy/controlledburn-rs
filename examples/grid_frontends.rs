@@ -177,6 +177,205 @@ impl Grid for Sector {
     }
 }
 
+/// How a quad mesh maps each cell's index square onto its quadrilateral.
+#[derive(Clone, Copy, PartialEq)]
+enum CellMap {
+    /// Bilinear in the corners, as GDAL's geolocation arrays: the cell's
+    /// sides are straight, but straight edges inside it map to curves, so
+    /// edges are cut into short pieces (as for the sector).
+    Bilinear,
+    /// Four triangles around a centre placed so that each has the same
+    /// share of the cell's area in index space as in world space; the map
+    /// is affine on each with one common scale, so index-space fractions
+    /// are world-area fractions. Edges are cut at sides and spokes, exactly.
+    EqualArea,
+}
+
+/// A curvilinear grid given by its corner coordinates only (no analytic
+/// inverse): cells are the straight-edged quadrilaterals through the
+/// corners. The inverse is a brute-force search here; rwarp would index
+/// the quadrilaterals.
+struct QuadMesh {
+    /// `(ncol + 1) * (nrow + 1)` corners, row-major, row 0 at the top.
+    p: Vec<[f64; 2]>,
+    n: (usize, usize),
+    map: CellMap,
+    /// Per cell: the equal-area centre in world space and in the unit square.
+    centre: Vec<([f64; 2], [f64; 2])>,
+    step: f64,
+}
+
+/// A triangle's three vertices.
+type Tri = [[f64; 2]; 3];
+
+fn tri_area(a: [f64; 2], b: [f64; 2], c: [f64; 2]) -> f64 {
+    0.5 * ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]))
+}
+
+/// Bilinear interpolation in corners `[P00, P10, P11, P01]` at `(u, v)`.
+fn bilinear(q: &[[f64; 2]; 4], [u, v]: [f64; 2]) -> [f64; 2] {
+    let w = [(1.0 - u) * (1.0 - v), u * (1.0 - v), u * v, (1.0 - u) * v];
+    std::array::from_fn(|k| w[0] * q[0][k] + w[1] * q[1][k] + w[2] * q[2][k] + w[3] * q[3][k])
+}
+
+/// `p` in triangle `s` moved to the same barycentric position in `d`.
+fn bary_map(s: &[[f64; 2]; 3], d: &[[f64; 2]; 3], p: [f64; 2]) -> [f64; 2] {
+    let a = tri_area(s[0], s[1], s[2]);
+    let (l0, l1) = (tri_area(p, s[1], s[2]) / a, tri_area(s[0], p, s[2]) / a);
+    let l2 = 1.0 - l0 - l1;
+    [l0 * d[0][0] + l1 * d[1][0] + l2 * d[2][0], l0 * d[0][1] + l1 * d[1][1] + l2 * d[2][1]]
+}
+
+fn in_tri(t: &[[f64; 2]; 3], p: [f64; 2]) -> bool {
+    let a = tri_area(t[0], t[1], t[2]);
+    let e = 1e-12 * a.abs();
+    (0..3).all(|k| tri_area(t[k], t[(k + 1) % 3], p) * a.signum() >= -e)
+}
+
+impl QuadMesh {
+    fn from_grid(g: &dyn Grid, map: CellMap, step: f64) -> Self {
+        let (w, h) = g.shape();
+        let p = (0..=h).flat_map(|r| (0..=w).map(move |c| g.to_world([c as f64, r as f64]))).collect();
+        let mut m = QuadMesh { p, n: (w, h), map, centre: Vec::new(), step };
+        m.centre = (0..h).flat_map(|r| (0..w).map(move |c| (c, r))).map(|(c, r)| m.equal_area_centre(c, r)).collect();
+        m
+    }
+
+    /// Corners `[P00, P10, P11, P01]` of cell `(c, r)`, with their unit-square positions.
+    fn quad(&self, c: usize, r: usize) -> [[f64; 2]; 4] {
+        let k = |c: usize, r: usize| self.p[r * (self.n.0 + 1) + c];
+        [k(c, r), k(c + 1, r), k(c + 1, r + 1), k(c, r + 1)]
+    }
+
+    /// The centre: the mean of the four corners. The two triangles on the
+    /// `v = 0` and `v = 1` sides have a summed area linear in the centre,
+    /// equal to the cell's area summed over the two side midpoints, so it is
+    /// half the area at their midpoint, the mean of the corners; the other
+    /// two triangles then hold the other half. The unit-square centre gives
+    /// each triangle the same share of the square.
+    fn equal_area_centre(&self, c: usize, r: usize) -> ([f64; 2], [f64; 2]) {
+        let [p00, p10, p11, p01] = self.quad(c, r);
+        let a = tri_area(p00, p10, p11) + tri_area(p00, p11, p01);
+        let x = [(p00[0] + p10[0] + p11[0] + p01[0]) / 4.0, (p00[1] + p10[1] + p11[1] + p01[1]) / 4.0];
+        // unit-square triangles on u = 0 and v = 0 have areas u/2 and v/2
+        (x, [2.0 * tri_area(p01, p00, x) / a, 2.0 * tri_area(p00, p10, x) / a])
+    }
+
+    /// The four (world, unit square) triangle pairs of a cell.
+    fn triangles(&self, c: usize, r: usize) -> [(Tri, Tri); 4] {
+        let q = self.quad(c, r);
+        let (cw, cu) = self.centre[r * self.n.0 + c];
+        let u = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]];
+        std::array::from_fn(|k| ([q[k], q[(k + 1) % 4], cw], [u[k], u[(k + 1) % 4], cu]))
+    }
+
+    fn cell_of_index(&self, i: [f64; 2]) -> (usize, usize) {
+        let c = (i[0].floor().max(0.0) as usize).min(self.n.0 - 1);
+        let r = (i[1].floor().max(0.0) as usize).min(self.n.1 - 1);
+        (c, r)
+    }
+
+    /// Brute force: the first cell whose quadrilateral holds `p`.
+    fn cell_of_world(&self, p: [f64; 2]) -> Option<(usize, usize)> {
+        (0..self.n.1).flat_map(|r| (0..self.n.0).map(move |c| (c, r))).find(|&(c, r)| {
+            let q = self.quad(c, r);
+            in_tri(&[q[0], q[1], q[2]], p) || in_tri(&[q[0], q[2], q[3]], p)
+        })
+    }
+
+    /// Unit-square position of `p` in cell `(c, r)`, inverting the bilinear
+    /// map by Newton's method.
+    fn inverse_bilinear(&self, c: usize, r: usize, p: [f64; 2]) -> [f64; 2] {
+        let [p00, p10, p11, p01] = self.quad(c, r);
+        let (mut u, mut v) = (0.5, 0.5);
+        for _ in 0..50 {
+            let b = bilinear(&[p00, p10, p11, p01], [u, v]);
+            let f = |k: usize| b[k] - p[k];
+            let du = |k: usize| (1.0 - v) * (p10[k] - p00[k]) + v * (p11[k] - p01[k]);
+            let dv = |k: usize| (1.0 - u) * (p01[k] - p00[k]) + u * (p11[k] - p10[k]);
+            let det = du(0) * dv(1) - du(1) * dv(0);
+            let (fx, fy) = (f(0), f(1));
+            u -= (fx * dv(1) - fy * dv(0)) / det;
+            v -= (du(0) * fy - du(1) * fx) / det;
+        }
+        [u, v]
+    }
+}
+
+impl Grid for QuadMesh {
+    fn shape(&self) -> (usize, usize) {
+        self.n
+    }
+    fn to_index(&self, p: [f64; 2]) -> [f64; 2] {
+        let (c, r) = self.cell_of_world(p).expect("point outside the mesh");
+        let l = match self.map {
+            CellMap::Bilinear => self.inverse_bilinear(c, r, p),
+            CellMap::EqualArea => {
+                let ts = self.triangles(c, r);
+                let (w, u) = ts.iter().find(|(w, _)| in_tri(w, p)).unwrap_or(&ts[0]);
+                bary_map(w, u, p)
+            }
+        };
+        [c as f64 + l[0], r as f64 + l[1]]
+    }
+    fn to_world(&self, i: [f64; 2]) -> [f64; 2] {
+        let (c, r) = self.cell_of_index(i);
+        let l = [i[0] - c as f64, i[1] - r as f64];
+        match self.map {
+            CellMap::Bilinear => bilinear(&self.quad(c, r), l),
+            CellMap::EqualArea => {
+                let ts = self.triangles(c, r);
+                let (w, u) = ts.iter().find(|(_, u)| in_tri(u, l)).unwrap_or(&ts[0]);
+                bary_map(u, w, l)
+            }
+        }
+    }
+    fn ring_to_index(&self, ring: &Ring) -> Ring {
+        let mut out = Vec::new();
+        for s in ring.windows(2) {
+            let (a, b) = (s[0], s[1]);
+            let mut ts = vec![0.0];
+            match self.map {
+                CellMap::Bilinear => {
+                    let (ia, ib) = (self.to_index(a), self.to_index(b));
+                    let k = ((ib[0] - ia[0]).hypot(ib[1] - ia[1]) / self.step).ceil().max(1.0) as usize;
+                    ts.extend((1..k).map(|j| j as f64 / k as f64));
+                }
+                CellMap::EqualArea => {
+                    // every side and spoke the segment crosses (brute force)
+                    let d = [b[0] - a[0], b[1] - a[1]];
+                    for r in 0..self.n.1 {
+                        for c in 0..self.n.0 {
+                            for (w, _) in self.triangles(c, r) {
+                                for k in 0..3 {
+                                    let (e0, e1) = (w[k], w[(k + 1) % 3]);
+                                    let e = [e1[0] - e0[0], e1[1] - e0[1]];
+                                    let den = d[0] * e[1] - d[1] * e[0];
+                                    if den == 0.0 {
+                                        continue;
+                                    }
+                                    let t = ((e0[0] - a[0]) * e[1] - (e0[1] - a[1]) * e[0]) / den;
+                                    let u = ((e0[0] - a[0]) * d[1] - (e0[1] - a[1]) * d[0]) / den;
+                                    if t > 0.0 && t < 1.0 && (0.0..=1.0).contains(&u) {
+                                        ts.push(t);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    ts.sort_by(f64::total_cmp);
+                    ts.dedup();
+                }
+            }
+            for t in ts {
+                out.push(self.to_index([a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]));
+            }
+        }
+        out.push(self.to_index(*ring.last().unwrap()));
+        out
+    }
+}
+
 /// The front end: rings to index space (y negated, so rows run down),
 /// burned on unit cells; fractions summed per cell with holes subtracted.
 /// With `cut` false, vertices are mapped one by one (edges left straight in
@@ -341,6 +540,12 @@ fn main() {
     yw.reverse();
     let rect = Rectilinear { xw: stretched(36, 0.0, 300.0, 1.08), yw };
     let sector = Sector { r0: 8_000.0, r1: 40_000.0, a0: 100.0, a1: 10.0, n: (24, 30), step: 0.05 };
+    // The sector's corners as a plain curvilinear grid: straight-edged
+    // quadrilaterals, no analytic inverse.
+    let quads_bilinear = QuadMesh::from_grid(&sector, CellMap::Bilinear, 0.05);
+    let quads_equal = QuadMesh::from_grid(&sector, CellMap::EqualArea, 0.05);
+    let sector_polys =
+        || vec![star([8_200.0, 22_550.0], 9_000.0), sliver([-1_000.0, 12_000.0], [36_000.0, 10_000.0], 1_500.0)];
 
     let cases: Vec<Case> = vec![
         (
@@ -361,6 +566,8 @@ fn main() {
             vec![star([8_200.0, 22_550.0], 9_000.0), sliver([-1_000.0, 12_000.0], [36_000.0, 10_000.0], 1_500.0)],
             64,
         ),
+        ("quads, bilinear", &quads_bilinear, sector_polys(), 1),
+        ("quads, equal-area", &quads_equal, sector_polys(), 1),
     ];
 
     println!(
@@ -420,7 +627,10 @@ fn main() {
          Polar sector: the edges are followed closely, but a fraction of a unit cell is not a\n\
          fraction of the cell's area (the map is not affine within a cell), so cells differ by\n\
          about a percent while the total area stays close.\n\
-         Vertices only (edges straight in index space) is wrong by whole cells on both\n\
-         non-affine grids."
+         Quads: the same grid given by its corners only, cells straight-edged. Bilinear cells\n\
+         behave like the sector. Equal-area cells (four triangles, each with the same share of\n\
+         the cell's area in both spaces) match the world-space reference to single precision.\n\
+         Vertices only (edges straight in index space) is wrong by whole cells on every\n\
+         non-affine grid."
     );
 }
