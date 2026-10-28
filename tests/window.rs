@@ -130,6 +130,27 @@ fn shared_edges_add_up_to_the_whole() {
     assert!((left_raw.abs() - left[0].abs()).abs() < 1e-9);
 }
 
+#[test]
+fn far_vertices_cost_no_more_than_near_ones() {
+    // A transform near a singularity can throw a vertex very far away.
+    // The walk is bounded by the window, so this returns at once (unclipped,
+    // 1e12 cells of wall crossings would take hours) and still matches burn.
+    for far in [1e3, 1e8, 1e12] {
+        let r = vec![(vec![3.5, 9.25, far, 4.0], vec![2.5, 3.0, 11.7, 13.2])];
+        assert_close(&window_dense(&r), &burn_dense(&r), 1e-6);
+        let r = vec![(vec![3.5, 9.25, 4.0, -far], vec![2.5, 3.0, far, 11.7])];
+        assert_close(&window_dense(&r), &burn_dense(&r), 1e-6);
+    }
+    let pre = RowPrefix::<2>::from_fn(N, N, |i, j| [((i * 5 + j) % 7) as f64, 1.0]);
+    for far in [1e3, 1e8, 1e12] {
+        let (xs, ys) = (vec![3.5, 9.25, far, 4.0], vec![2.5, 3.0, -far, 13.2]);
+        let cov = window_dense(&[(xs.clone(), ys.clone())]);
+        let want: f64 = cov.iter().enumerate().map(|(k, c)| c * ((k % N * 5 + k / N) % 7) as f64).sum();
+        let got = pre.integrate_ring(&xs, &ys);
+        assert!((got[0] - want).abs() < 1e-6 * want.abs().max(1.0), "{far}: {} vs {}", got[0], want);
+    }
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(400))]
 
@@ -147,6 +168,33 @@ proptest! {
         let b = burn_dense(&r);
         for (x, y) in a.iter().zip(&b) {
             prop_assert!((x - y).abs() <= 2e-6, "{} vs {}", x, y);
+        }
+    }
+
+    #[test]
+    fn a_sub_window_equals_those_cells_of_the_whole(
+        cx in 4.0f64..20.0, cy in 4.0f64..20.0,
+        radii in prop::collection::vec(0.5f64..14.0, 3..16),
+        phase in 0.0f64..6.3,
+        c0 in 0i64..N as i64, r0 in 0i64..N as i64,
+        w in 1usize..8, h in 1usize..8,
+    ) {
+        let (xs, ys) = star(cx, cy, &radii, phase);
+        // The ring reaches past the N x N grid; take the reference from a
+        // window holding all of it.
+        const M: i64 = 64;
+        let mut big = CoverageWindow::default();
+        big.reset(-M / 2, -M / 2, M as usize, M as usize);
+        big.add_ring(&xs, &ys, 1.0);
+        let whole = big.resolve().to_vec();
+        let mut win = CoverageWindow::default();
+        win.reset(c0, r0, w, h);
+        win.add_ring(&xs, &ys, 1.0);
+        let sub = win.resolve();
+        for (k, v) in sub.iter().enumerate() {
+            let (c, r) = (c0 + (k % w) as i64, r0 + (k / w) as i64);
+            let want = whole[((r + M / 2) * M + c + M / 2) as usize];
+            prop_assert!((v - want).abs() <= 1e-9, "cell ({}, {}): {} vs {}", c, r, v, want);
         }
     }
 
@@ -173,3 +221,4 @@ proptest! {
         }
     }
 }
+

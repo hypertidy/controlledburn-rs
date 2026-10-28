@@ -95,6 +95,65 @@ fn for_each_piece(p: (f64, f64), q: (f64, f64), mut f: impl FnMut(f64, f64, f64)
     }
 }
 
+/// Split segment `p -> q` at every cell wall inside the box `[x0, x1]` by
+/// `[y0, y1]` (whole cells) and call `f(xm, ym, dy)` for each piece, as
+/// [`for_each_piece`] does, with the work bounded by the box rather than
+/// the segment's length.
+///
+/// The parts of the segment above or below the box are dropped. A part
+/// left or right of the box becomes a vertical segment on the box's left
+/// or right wall, over the same rows: both callers book a piece by its
+/// height and by its x clamped to the box, so this changes no result.
+/// Without it, a ring vertex thrown far away (a transform near a
+/// singularity) costs time in proportion to its distance.
+///
+/// Each clip point lies on a box wall: that coordinate is the wall's,
+/// exactly, and the other is interpolated from the nearer end, so a far
+/// vertex costs no precision near the box.
+#[inline]
+fn for_each_piece_in(p: (f64, f64), q: (f64, f64), (x0, x1, y0, y1): (f64, f64, f64, f64), mut f: impl FnMut(f64, f64, f64)) {
+    let (dx, dy) = (q.0 - p.0, q.1 - p.1);
+    if dy == 0.0 || !(p.0.is_finite() && p.1.is_finite() && q.0.is_finite() && q.1.is_finite()) {
+        return;
+    }
+    if p.1.max(q.1) <= y0 || p.1.min(q.1) >= y1 {
+        return;
+    }
+    // The other coordinate where the segment's line meets x = x or y = y,
+    // from the nearer end.
+    let y_at = |x: f64| {
+        let e = if (x - p.0).abs() <= (x - q.0).abs() { p } else { q };
+        e.1 + (x - e.0) * (dy / dx)
+    };
+    let x_at = |y: f64| {
+        let e = if (y - p.1).abs() <= (y - q.1).abs() { p } else { q };
+        e.0 + (y - e.1) * (dx / dy)
+    };
+    // Rows: move each end that is above or below the box onto its wall.
+    let clip_y = |e: (f64, f64)| {
+        let y = e.1.clamp(y0, y1);
+        if y == e.1 { e } else { (x_at(y), y) }
+    };
+    let (a, b) = (clip_y(p), clip_y(q));
+    // Columns: split where a -> b crosses a side wall, in order along it, so
+    // each part is wholly left of, inside or right of the box, then clamp
+    // each part's ends to the box.
+    let mut pts = [a, b, b, b];
+    let mut n = 1;
+    let walls = if b.0 >= a.0 { [x0, x1] } else { [x1, x0] };
+    for xw in walls {
+        if (a.0 - xw) * (b.0 - xw) < 0.0 {
+            pts[n] = (xw, y_at(xw).clamp(a.1.min(b.1), a.1.max(b.1)));
+            n += 1;
+        }
+    }
+    pts[n] = b;
+    for k in 0..n {
+        let (u, v) = (pts[k], pts[k + 1]);
+        for_each_piece((u.0.clamp(x0, x1), u.1), (v.0.clamp(x0, x1), v.1), &mut f);
+    }
+}
+
 /// Signed area of a ring given as separate coordinate slices (closed
 /// implicitly: the last point joins the first), `sum of x dy`. Positive
 /// when the ring runs clockwise as drawn with `y` down (counter-clockwise
@@ -209,7 +268,12 @@ impl CoverageWindow {
 
     /// Add segment `p -> q` with weight `w` (orientation is the caller's).
     pub fn add_segment(&mut self, p: (f64, f64), q: (f64, f64), w: f64) {
-        for_each_piece(p, q, |xm, ym, dy| self.book(xm, ym, w * dy));
+        if self.ncol == 0 || self.nrow == 0 {
+            return;
+        }
+        let (c0, r0) = (self.col0 as f64, self.row0 as f64);
+        let bounds = (c0, c0 + self.ncol as f64, r0, r0 + self.nrow as f64);
+        for_each_piece_in(p, q, bounds, |xm, ym, dy| self.book(xm, ym, w * dy));
     }
 
     /// Add a ring (closed implicitly) so that its interior counts `weight`
@@ -295,6 +359,11 @@ impl<const K: usize> RowPrefix<K> {
         self.nrow
     }
 
+    /// The grid as a box for [`for_each_piece_in`].
+    fn bounds(&self) -> (f64, f64, f64, f64) {
+        (0.0, self.ncol as f64, 0.0, self.nrow as f64)
+    }
+
     /// `F dy` for one piece. Inside cell `(i, j)` the antiderivative is
     /// `S(i) + (x - i) v(i)` with `v(i) = S(i + 1) - S(i)`.
     #[inline]
@@ -329,7 +398,7 @@ impl<const K: usize> RowPrefix<K> {
     pub fn integrate_polyline(&self, xs: &[f64], ys: &[f64]) -> [f64; K] {
         let mut out = [0.0; K];
         for k in 1..xs.len().min(ys.len()) {
-            for_each_piece((xs[k - 1], ys[k - 1]), (xs[k], ys[k]), |xm, ym, dy| self.piece(xm, ym, dy, &mut out));
+            for_each_piece_in((xs[k - 1], ys[k - 1]), (xs[k], ys[k]), self.bounds(), |xm, ym, dy| self.piece(xm, ym, dy, &mut out));
         }
         out
     }
@@ -344,7 +413,7 @@ impl<const K: usize> RowPrefix<K> {
         }
         for k in 0..n {
             let k1 = if k + 1 == n { 0 } else { k + 1 };
-            for_each_piece((xs[k], ys[k]), (xs[k1], ys[k1]), |xm, ym, dy| self.piece(xm, ym, dy, &mut out));
+            for_each_piece_in((xs[k], ys[k]), (xs[k1], ys[k1]), self.bounds(), |xm, ym, dy| self.piece(xm, ym, dy, &mut out));
         }
         // The boundary integral carries the sign of ring_area.
         if ring_area(xs, ys) < 0.0 {
