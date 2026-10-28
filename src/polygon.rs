@@ -136,7 +136,25 @@ fn walk_ring(
         // row, quadratic in boundary cells).
         let row_vec = &mut row_data[sub_r];
 
-        if frac != 0.0 {
+        // A cell with zero coverage still needs a record when the ring runs
+        // through it, from one point on its boundary to another: otherwise
+        // the sweep fills it with the winding from its left. Edges along
+        // both walls of a cell (lattice-aligned input) give zero coverage
+        // and zero net winding, one crossing on each wall cancelling, and
+        // the cell was filled as interior. A traversal that leaves where it
+        // entered (touching a corner, or a zero-width spike in and back out)
+        // encloses nothing, and its zero coverage says nothing about the
+        // cell: no record, the sweep fills it from the winding.
+        let passes_through = frac == 0.0 && in_grid_cols && {
+            let tol_x = (cr.bbox.xmax - cr.bbox.xmin) * 1e-9;
+            let tol_y = (cr.bbox.ymax - cr.bbox.ymin) * 1e-9;
+            valid.iter().any(|t| {
+                let tc = t.coords(arena);
+                let (a, b) = (tc[0], tc[tc.len() - 1]);
+                (a.x - b.x).abs() > tol_x || (a.y - b.y).abs() > tol_y
+            })
+        };
+        if frac != 0.0 || passes_through {
             row_vec.push(BoundaryCellRecord {
                 col: full_col,
                 coverage: coverage_factor * frac,
