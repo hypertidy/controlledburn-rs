@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased (0.2.2)
+
+- **`CoverageWindow` and `RowPrefix`: exact coverage and exact integrals
+  for small rings, without the traversal tables.** Both work in cell index
+  space and split each ring edge at cell walls. `CoverageWindow` books
+  each piece's area and height into a dense, reusable window and resolves
+  coverage with one prefix pass per row (the cell accumulation of
+  FreeType's "gray" rasteriser, kept exact). `RowPrefix` holds row prefix
+  sums of one or more fields, so that a ring's weighted sum is a boundary
+  integral: work proportional to the perimeter, and an edge shared by two
+  rings integrated once. They agree with `burn` in coverage mode to its
+  `f32` fractions (property-tested). Made for rwarp's exact footprint, one
+  small ring per destination pixel, where `burn`'s per-call setup and
+  per-cell records cost 1 to 2 microseconds a pixel; the window costs 0.2
+  to 0.5. See `src/window.rs` for the identity and a C++ port note.
+
 ## Unreleased
 
 - **Coverage: holes removed too much area.** A cell crossed only by a
