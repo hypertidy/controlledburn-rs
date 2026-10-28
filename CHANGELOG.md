@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.3 (unreleased)
+## 0.2.3
 
 - **Coverage: cells overcounted where an edge passes exactly through a
   cell corner, or where two edges nearly coincide** (#6). Found by the
