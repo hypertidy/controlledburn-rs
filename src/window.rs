@@ -111,7 +111,12 @@ fn for_each_piece(p: (f64, f64), q: (f64, f64), mut f: impl FnMut(f64, f64, f64)
 /// exactly, and the other is interpolated from the nearer end, so a far
 /// vertex costs no precision near the box.
 #[inline]
-fn for_each_piece_in(p: (f64, f64), q: (f64, f64), (x0, x1, y0, y1): (f64, f64, f64, f64), mut f: impl FnMut(f64, f64, f64)) {
+fn for_each_piece_in(
+    p: (f64, f64),
+    q: (f64, f64),
+    (x0, x1, y0, y1): (f64, f64, f64, f64),
+    mut f: impl FnMut(f64, f64, f64),
+) {
     let (dx, dy) = (q.0 - p.0, q.1 - p.1);
     if dy == 0.0 || !(p.0.is_finite() && p.1.is_finite() && q.0.is_finite() && q.1.is_finite()) {
         return;
@@ -132,7 +137,11 @@ fn for_each_piece_in(p: (f64, f64), q: (f64, f64), (x0, x1, y0, y1): (f64, f64, 
     // Rows: move each end that is above or below the box onto its wall.
     let clip_y = |e: (f64, f64)| {
         let y = e.1.clamp(y0, y1);
-        if y == e.1 { e } else { (x_at(y), y) }
+        if y == e.1 {
+            e
+        } else {
+            (x_at(y), y)
+        }
     };
     let (a, b) = (clip_y(p), clip_y(q));
     // Columns: split where a -> b crosses a side wall, in order along it, so
@@ -398,7 +407,9 @@ impl<const K: usize> RowPrefix<K> {
     pub fn integrate_polyline(&self, xs: &[f64], ys: &[f64]) -> [f64; K] {
         let mut out = [0.0; K];
         for k in 1..xs.len().min(ys.len()) {
-            for_each_piece_in((xs[k - 1], ys[k - 1]), (xs[k], ys[k]), self.bounds(), |xm, ym, dy| self.piece(xm, ym, dy, &mut out));
+            for_each_piece_in((xs[k - 1], ys[k - 1]), (xs[k], ys[k]), self.bounds(), |xm, ym, dy| {
+                self.piece(xm, ym, dy, &mut out)
+            });
         }
         out
     }
@@ -413,7 +424,9 @@ impl<const K: usize> RowPrefix<K> {
         }
         for k in 0..n {
             let k1 = if k + 1 == n { 0 } else { k + 1 };
-            for_each_piece_in((xs[k], ys[k]), (xs[k1], ys[k1]), self.bounds(), |xm, ym, dy| self.piece(xm, ym, dy, &mut out));
+            for_each_piece_in((xs[k], ys[k]), (xs[k1], ys[k1]), self.bounds(), |xm, ym, dy| {
+                self.piece(xm, ym, dy, &mut out)
+            });
         }
         // The boundary integral carries the sign of ring_area.
         if ring_area(xs, ys) < 0.0 {

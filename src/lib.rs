@@ -85,8 +85,8 @@ mod output;
 mod point;
 mod polygon;
 mod walker;
-mod wkb;
 mod window;
+mod wkb;
 
 pub use burn::{burn, burn_wkb, BurnMode, BurnOptions};
 pub use coalesce::coalesce_runs;
@@ -95,5 +95,5 @@ pub use geometry::{is_ccw, signed_area, Coord, CoordSeq, Geometry, Polygon};
 pub use grid::GridSpec;
 pub use materialize::{materialize, EdgePolicy, MaterializeOptions, PixelFn};
 pub use output::{BurnResult, GridEdge, GridLine, GridPoint, GridRun, Note};
-pub use wkb::parse_wkb;
 pub use window::{ring_area, CoverageWindow, RowPrefix};
+pub use wkb::parse_wkb;
