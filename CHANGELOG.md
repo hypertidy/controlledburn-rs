@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **`Measure`: spherical area for grids whose rows are parallels.**
+  `CoverageWindow::with_measure` / `set_measure` with
+  `Measure::CosLatitude { phi0, dphi }` (latitude `phi0 + dphi * y`, radians)
+  measures area with the element `cos(phi) dx dy`, as on the sphere for any
+  regular longitude/latitude grid. Each edge piece books closed-form
+  integrals of `cos(phi) dy` and `(x - k) cos(phi) dy` (x is linear in y
+  along a piece), so the row accumulation is unchanged; coverage is the
+  covered measure over the cell's (`Measure::cell_area`), and
+  `Measure::ring_area` gives a ring's. `Measure::Planar` is the default and
+  its arithmetic is unchanged. Tested against closed forms, quadrature and
+  per-cell clipping (`tests/measure.rs`). For rwarp's conservative weights
+  (rwarp `design/conservative.md`, stage 3). The C++ core does not have it
+  yet.
+
 ## 0.2.3
 
 - **Coverage: cells overcounted where an edge passes exactly through a

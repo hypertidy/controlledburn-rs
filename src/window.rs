@@ -48,15 +48,120 @@
 //! self-overlapping ring counts its overlap twice (or cancels it, for
 //! opposite turning) instead of taking the non-zero winding rule.
 //!
+//! # Measures
+//!
+//! The identity holds for any area element `w(y) dx dy` that depends on the
+//! row coordinate only: replace `(x - k) dy` with the integral of
+//! `(x - k) w(y) dy` along the piece, which has a closed form because `x`
+//! is linear in `y` along it. [`Measure::CosLatitude`] is the sphere for a
+//! grid whose rows are parallels (any regular longitude/latitude grid):
+//! `w(y) = cos(phi(y))`. [`CoverageWindow`] then reports each cell's
+//! covered measure as a fraction of the cell's own, and
+//! [`Measure::ring_area`] gives a ring's measure. The planar measure is the
+//! default and its arithmetic is unchanged.
+//!
 //! C++ port note: both are header-only candidates for the C++
 //! controlledburn (no dependencies, plain loops over `double`); the piece
 //! walk below ports line for line.
 
-/// Split segment `p -> q` at every cell wall and call `f(xm, ym, dy)` for
-/// each piece with non-zero height. Horizontal pieces carry neither area
-/// nor cover and are skipped.
+/// How area is measured in cell index space; see the module docs.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
+pub enum Measure {
+    /// Area in index space: every cell has area 1.
+    #[default]
+    Planar,
+    /// Area on the unit sphere per unit of `x`, for a grid whose rows are
+    /// parallels: the area element is `cos(phi) dx dy` with latitude
+    /// `phi = phi0 + dphi * y` in radians. For a regular longitude/latitude
+    /// grid with column width `dlam` radians, multiply by `|dlam * dphi|`
+    /// for steradians. `phi` must stay within the poles.
+    CosLatitude { phi0: f64, dphi: f64 },
+}
+
+/// `sin(t) / t`.
 #[inline]
-fn for_each_piece(p: (f64, f64), q: (f64, f64), mut f: impl FnMut(f64, f64, f64)) {
+fn sinc(t: f64) -> f64 {
+    if t.abs() < 1e-4 {
+        1.0 - t * t / 6.0
+    } else {
+        t.sin() / t
+    }
+}
+
+/// `(sin z - z cos z) / z^3`, by its series for small `z`.
+#[inline]
+fn sin_minus_zcos_over_z3(z: f64) -> f64 {
+    let z2 = z * z;
+    if z.abs() < 0.5 {
+        1.0 / 3.0 - z2 * (1.0 / 30.0 - z2 * (1.0 / 840.0 - z2 * (1.0 / 45360.0 - z2 / 3991680.0)))
+    } else {
+        (z.sin() - z * z.cos()) / (z2 * z)
+    }
+}
+
+impl Measure {
+    /// The sphere for rows of latitude `phi0 + dphi * y` (radians).
+    pub fn cos_latitude(phi0: f64, dphi: f64) -> Self {
+        Measure::CosLatitude { phi0, dphi }
+    }
+
+    /// For one straight piece with midpoint `(xm, ym)` and extent
+    /// `(dx, dy)`: the integrals of `w(y) dy` ("cover") and of `x w(y) dy`
+    /// ("area") along it.
+    #[inline]
+    fn piece(&self, xm: f64, ym: f64, dx: f64, dy: f64) -> (f64, f64) {
+        match *self {
+            Measure::Planar => (dy, xm * dy),
+            Measure::CosLatitude { phi0, dphi } => {
+                // With u = y - ym over [-h, h], h = dy / 2, and x = xm + s u:
+                // int w du = 2 cos(phim) sin(c h) / c = cos(phim) dy sinc(c h),
+                // int u w du = -sin(phim) 2 (sin z - z cos z) / c^2, z = c h.
+                let phim = phi0 + dphi * ym;
+                let h = 0.5 * dy;
+                let z = dphi * h;
+                let cover = phim.cos() * dy * sinc(z);
+                let first = -phim.sin() * 2.0 * dphi * h * h * h * sin_minus_zcos_over_z3(z);
+                (cover, xm * cover + (dx / dy) * first)
+            }
+        }
+    }
+
+    /// The measure of a cell in row `row` (`y` in `[row, row + 1]`): 1 for
+    /// [`Measure::Planar`].
+    pub fn cell_area(&self, row: i64) -> f64 {
+        match *self {
+            Measure::Planar => 1.0,
+            Measure::CosLatitude { phi0, dphi } => (phi0 + dphi * (row as f64 + 0.5)).cos() * sinc(0.5 * dphi),
+        }
+    }
+
+    /// Signed measure of a ring (closed implicitly), with the sign of
+    /// [`ring_area`]. Exact for straight edges in index space.
+    pub fn ring_area(&self, xs: &[f64], ys: &[f64]) -> f64 {
+        if let Measure::Planar = self {
+            return ring_area(xs, ys);
+        }
+        let n = xs.len().min(ys.len());
+        let mut a = 0.0;
+        for k in 0..n {
+            let k1 = if k + 1 == n { 0 } else { k + 1 };
+            let dy = ys[k1] - ys[k];
+            if dy != 0.0 {
+                let (xm, ym) = (0.5 * (xs[k] + xs[k1]), 0.5 * (ys[k] + ys[k1]));
+                a += self.piece(xm, ym, xs[k1] - xs[k], dy).1;
+            }
+        }
+        a
+    }
+}
+
+/// Split segment `p -> q` at every cell wall and call `f(xm, ym, dx, dy)`
+/// for each piece with non-zero height. Horizontal pieces carry neither
+/// area nor cover and are skipped.
+#[inline]
+fn for_each_piece(p: (f64, f64), q: (f64, f64), mut f: impl FnMut(f64, f64, f64, f64)) {
     let ((x0, y0), (x1, y1)) = (p, q);
     let (dx, dy) = (x1 - x0, y1 - y0);
     if dy == 0.0 || !(dx.is_finite() && dy.is_finite()) {
@@ -80,7 +185,7 @@ fn for_each_piece(p: (f64, f64), q: (f64, f64), mut f: impl FnMut(f64, f64, f64)
         let tn = tx.min(ty).min(1.0);
         if tn > t {
             let tm = 0.5 * (t + tn);
-            f(x0 + tm * dx, y0 + tm * dy, (tn - t) * dy);
+            f(x0 + tm * dx, y0 + tm * dy, (tn - t) * dx, (tn - t) * dy);
         }
         if tn >= 1.0 {
             break;
@@ -96,14 +201,15 @@ fn for_each_piece(p: (f64, f64), q: (f64, f64), mut f: impl FnMut(f64, f64, f64)
 }
 
 /// Split segment `p -> q` at every cell wall inside the box `[x0, x1]` by
-/// `[y0, y1]` (whole cells) and call `f(xm, ym, dy)` for each piece, as
+/// `[y0, y1]` (whole cells) and call `f(xm, ym, dx, dy)` for each piece, as
 /// [`for_each_piece`] does, with the work bounded by the box rather than
 /// the segment's length.
 ///
 /// The parts of the segment above or below the box are dropped. A part
 /// left or right of the box becomes a vertical segment on the box's left
 /// or right wall, over the same rows: both callers book a piece by its
-/// height and by its x clamped to the box, so this changes no result.
+/// height (and, under a measure, its rows) and by its x clamped to the
+/// box, so this changes no result.
 /// Without it, a ring vertex thrown far away (a transform near a
 /// singularity) costs time in proportion to its distance.
 ///
@@ -115,7 +221,7 @@ fn for_each_piece_in(
     p: (f64, f64),
     q: (f64, f64),
     (x0, x1, y0, y1): (f64, f64, f64, f64),
-    mut f: impl FnMut(f64, f64, f64),
+    mut f: impl FnMut(f64, f64, f64, f64),
 ) {
     let (dx, dy) = (q.0 - p.0, q.1 - p.1);
     if dy == 0.0 || !(p.0.is_finite() && p.1.is_finite() && q.0.is_finite() && q.1.is_finite()) {
@@ -199,9 +305,26 @@ pub struct CoverageWindow {
     nrow: usize,
     area: Vec<f64>,
     cover: Vec<f64>,
+    measure: Measure,
 }
 
 impl CoverageWindow {
+    /// A window that measures area with `measure` (default
+    /// [`Measure::Planar`]). Coverage is then each cell's covered measure
+    /// as a fraction of the cell's.
+    pub fn with_measure(measure: Measure) -> Self {
+        CoverageWindow { measure, ..Default::default() }
+    }
+
+    /// Change the measure; it stays across [`reset`](Self::reset).
+    pub fn set_measure(&mut self, measure: Measure) {
+        self.measure = measure;
+    }
+
+    pub fn measure(&self) -> Measure {
+        self.measure
+    }
+
     /// Clear the window and place it over columns `col0..col0 + ncol` and
     /// rows `row0..row0 + nrow`. Reuses the buffers.
     pub fn reset(&mut self, col0: i64, row0: i64, ncol: usize, nrow: usize) {
@@ -258,8 +381,12 @@ impl CoverageWindow {
     /// area term uses the column it is booked to. Pieces outside the
     /// window's rows are dropped; pieces left or right of it clamp to its
     /// first or last column, which keeps the row sums right.
+    ///
+    /// Under a measure the area term is the integral of
+    /// `(x - (i + 1)) w(y) dy` along the piece; a piece moved onto a wall by
+    /// the clamp is vertical there.
     #[inline]
-    fn book(&mut self, xm: f64, ym: f64, dy: f64) {
+    fn book(&mut self, xm: f64, ym: f64, dx: f64, dy: f64, w: f64) {
         if self.ncol == 0 {
             return;
         }
@@ -271,8 +398,16 @@ impl CoverageWindow {
         let i = (self.col0 + li) as f64;
         let x = xm.clamp(i, i + 1.0);
         let k = lj as usize * self.ncol + li as usize;
-        self.area[k] += (x - (i + 1.0)) * dy;
-        self.cover[k] += dy;
+        if let Measure::Planar = self.measure {
+            let dy = w * dy;
+            self.area[k] += (x - (i + 1.0)) * dy;
+            self.cover[k] += dy;
+        } else {
+            let dx = if x == xm { dx } else { 0.0 };
+            let (cover, area) = self.measure.piece(x - (i + 1.0), ym, dx, dy);
+            self.area[k] += w * area;
+            self.cover[k] += w * cover;
+        }
     }
 
     /// Add segment `p -> q` with weight `w` (orientation is the caller's).
@@ -282,7 +417,7 @@ impl CoverageWindow {
         }
         let (c0, r0) = (self.col0 as f64, self.row0 as f64);
         let bounds = (c0, c0 + self.ncol as f64, r0, r0 + self.nrow as f64);
-        for_each_piece_in(p, q, bounds, |xm, ym, dy| self.book(xm, ym, w * dy));
+        for_each_piece_in(p, q, bounds, |xm, ym, dx, dy| self.book(xm, ym, dx, dy, w));
     }
 
     /// Add a ring (closed implicitly) so that its interior counts `weight`
@@ -301,14 +436,21 @@ impl CoverageWindow {
     }
 
     /// Resolve the booked pieces into coverage, row-major over the window,
-    /// and return it. Call once, after the last `add_*`.
+    /// and return it. Call once, after the last `add_*`. Under a measure,
+    /// coverage is the covered measure over the cell's.
     pub fn resolve(&mut self) -> &[f64] {
         for j in 0..self.nrow {
             let row = j * self.ncol..(j + 1) * self.ncol;
             let mut acc = 0.0;
-            for (a, c) in self.area[row.clone()].iter_mut().zip(&self.cover[row]) {
+            for (a, c) in self.area[row.clone()].iter_mut().zip(&self.cover[row.clone()]) {
                 *a -= acc;
                 acc += *c;
+            }
+            if !matches!(self.measure, Measure::Planar) {
+                let cell = self.measure.cell_area(self.row0 + j as i64);
+                for a in &mut self.area[row] {
+                    *a /= cell;
+                }
             }
         }
         &self.area
@@ -407,7 +549,7 @@ impl<const K: usize> RowPrefix<K> {
     pub fn integrate_polyline(&self, xs: &[f64], ys: &[f64]) -> [f64; K] {
         let mut out = [0.0; K];
         for k in 1..xs.len().min(ys.len()) {
-            for_each_piece_in((xs[k - 1], ys[k - 1]), (xs[k], ys[k]), self.bounds(), |xm, ym, dy| {
+            for_each_piece_in((xs[k - 1], ys[k - 1]), (xs[k], ys[k]), self.bounds(), |xm, ym, _, dy| {
                 self.piece(xm, ym, dy, &mut out)
             });
         }
@@ -424,7 +566,7 @@ impl<const K: usize> RowPrefix<K> {
         }
         for k in 0..n {
             let k1 = if k + 1 == n { 0 } else { k + 1 };
-            for_each_piece_in((xs[k], ys[k]), (xs[k1], ys[k1]), self.bounds(), |xm, ym, dy| {
+            for_each_piece_in((xs[k], ys[k]), (xs[k1], ys[k1]), self.bounds(), |xm, ym, _, dy| {
                 self.piece(xm, ym, dy, &mut out)
             });
         }

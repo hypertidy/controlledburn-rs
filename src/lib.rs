@@ -95,5 +95,5 @@ pub use geometry::{is_ccw, signed_area, Coord, CoordSeq, Geometry, Polygon};
 pub use grid::GridSpec;
 pub use materialize::{materialize, EdgePolicy, MaterializeOptions, PixelFn};
 pub use output::{BurnResult, GridEdge, GridLine, GridPoint, GridRun, Note};
-pub use window::{ring_area, CoverageWindow, RowPrefix};
+pub use window::{ring_area, CoverageWindow, Measure, RowPrefix};
 pub use wkb::parse_wkb;
