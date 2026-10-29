@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.4
 
 - **`Measure`: spherical area for grids whose rows are parallels.**
   `CoverageWindow::with_measure` / `set_measure` with
