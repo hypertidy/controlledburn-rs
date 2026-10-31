@@ -11,6 +11,13 @@
   that cropping then materializing equals slicing the full raster, bit for
   bit, on random windows of a non-dyadic grid (`tests/crop.rs`). The book's
   crop chapter is now in its table of contents, so its examples are tested.
+- **Canonical tables for the C++ core.** `tests/canon.rs` generates 240
+  lattice-biased cases (rings with vertices on corners, walls and centre
+  lines, holes, multipolygons, lines, points) on non-dyadic grids and keeps
+  `fixtures/canon-tables.txt`, every record of both modes in parity mode,
+  current. The C++ core checks itself against the same file
+  (hypertidy/controlledburn `cpp/tests/test_canon_tables.cpp`): at this
+  commit all 6737 records agree, fractions as bits.
 
 ## 0.2.4
 

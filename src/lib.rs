@@ -61,10 +61,15 @@
 //!   that off for record-for-record equality with the C++ tables.
 //! * Sorts are stable, so ties among equal-x intercepts in Approx mode
 //!   are deterministic.
-//! * Indices are 0-based with half-open run ranges and `id = k`; the C++
-//!   core (and its R and Python bindings) emit 1-based indices, inclusive
-//!   `col_end` and `id = k + 1`. `BurnOptions::parity` does not change
-//!   this; the golden tests apply the offset when comparing.
+//! * Indices are 0-based with half-open run ranges and `id = k`, as in the
+//!   C++ core; its R binding adds 1 to row, col, col_start and id (1-based,
+//!   inclusive `col_end`). The golden tables in `fixtures/` were written by
+//!   the R-era core, 1-based, and the golden tests apply the offset.
+//!
+//! This crate is the canonical implementation. `tests/canon.rs` writes
+//! `fixtures/canon-tables.txt`, record-level tables for 240 generated cases
+//! in both modes, which the C++ core checks itself against
+//! (`cpp/tests/test_canon_tables.cpp` in hypertidy/controlledburn).
 
 #![forbid(unsafe_code)]
 #![warn(missing_debug_implementations)]
