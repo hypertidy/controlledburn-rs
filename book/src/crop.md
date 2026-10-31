@@ -7,8 +7,8 @@ without re-burning and without ever allocating the full raster.
 
 `crop` does that on the sparse tables directly. It filters and clips the
 four tables (`runs`, `edges`, `lines`, `points`) to a target window, snaps
-the window outward to whole cells, and re-bases every row/column index to 1
-so the cropped result stands on its own. There is no dense buffer in sight;
+the window outward to whole cells, and re-bases every row/column index to 0
+(the window's top-left cell) so the cropped result stands on its own. There is no dense buffer in sight;
 the cost is proportional to the number of records, not the number of pixels.
 
 Because a `BurnResult` carries no grid metadata of its own, you pass the

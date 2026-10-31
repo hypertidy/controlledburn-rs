@@ -3,7 +3,7 @@
 //! [`crop`] is the Rust analogue of the R package's `crop_burn()` and the
 //! Python `BurnResult.crop()`: it filters and clips the four sparse tables
 //! (runs, edges, lines, points) to a sub-window of the grid, re-basing all
-//! row/col indices to 1 and snapping the window outward to whole cells. No
+//! row/col indices to 0 and snapping the window outward to whole cells. No
 //! dense buffer is allocated — this is structured filtering only, and it
 //! chains straight into [`crate::materialize`] to cut a tile from a single
 //! burn.
@@ -56,15 +56,15 @@ pub fn crop(result: &BurnResult, grid: &GridSpec, target: [f64; 4]) -> Option<(B
     let ncol = grid.ncol as i64;
     let nrow = grid.nrow as i64;
 
-    // 1-based inclusive limits, snapped outward. The eps nudge avoids
+    // 0-based half-open limits, snapped outward. The eps nudge avoids
     // floor/ceil flips when the target aligns exactly with a cell boundary.
     const EPS: f64 = 1e-8;
-    let col_lo = ((((txmin - grid.xmin) / dx) + EPS).floor() as i64 + 1).max(1);
+    let col_lo = ((((txmin - grid.xmin) / dx) + EPS).floor() as i64).max(0);
     let col_hi = ((((txmax - grid.xmin) / dx) - EPS).ceil() as i64).min(ncol);
+    let row_lo = ((((grid.ymax - tymax) / dy) + EPS).floor() as i64).max(0);
     let row_hi = ((((grid.ymax - tymin) / dy) - EPS).ceil() as i64).min(nrow);
-    let row_lo = ((((grid.ymax - tymax) / dy) + EPS).floor() as i64 + 1).max(1);
 
-    if col_lo > col_hi || row_lo > row_hi {
+    if col_lo >= col_hi || row_lo >= row_hi {
         return None;
     }
 
@@ -72,26 +72,26 @@ pub fn crop(result: &BurnResult, grid: &GridSpec, target: [f64; 4]) -> Option<(B
     let (row_lo, row_hi) = (row_lo as i32, row_hi as i32);
 
     let subgrid = GridSpec::new(
-        grid.xmin + (col_lo - 1) as f64 * dx,
+        grid.xmin + col_lo as f64 * dx,
         grid.ymax - row_hi as f64 * dy,
         grid.xmin + col_hi as f64 * dx,
-        grid.ymax - (row_lo - 1) as f64 * dy,
-        (col_hi - col_lo + 1) as u32,
-        (row_hi - row_lo + 1) as u32,
+        grid.ymax - row_lo as f64 * dy,
+        (col_hi - col_lo) as u32,
+        (row_hi - row_lo) as u32,
     );
 
-    let in_rows = |row: i32| row >= row_lo && row <= row_hi;
-    let in_cols = |col: i32| col >= col_lo && col <= col_hi;
+    let in_rows = |row: i32| row >= row_lo && row < row_hi;
+    let in_cols = |col: i32| col >= col_lo && col < col_hi;
 
     let mut out = BurnResult::default();
 
     for r in &result.runs {
-        // A run overlaps the window when its span meets [col_lo, col_hi].
-        if in_rows(r.row) && r.col_end >= col_lo && r.col_start <= col_hi {
+        // A run (half-open) overlaps the window when the spans intersect.
+        if in_rows(r.row) && r.col_end > col_lo && r.col_start < col_hi {
             out.runs.push(crate::output::GridRun {
-                row: r.row - row_lo + 1,
-                col_start: r.col_start.max(col_lo) - col_lo + 1,
-                col_end: r.col_end.min(col_hi) - col_lo + 1,
+                row: r.row - row_lo,
+                col_start: r.col_start.max(col_lo) - col_lo,
+                col_end: r.col_end.min(col_hi) - col_lo,
                 id: r.id,
             });
         }
@@ -99,8 +99,8 @@ pub fn crop(result: &BurnResult, grid: &GridSpec, target: [f64; 4]) -> Option<(B
     for e in &result.edges {
         if in_rows(e.row) && in_cols(e.col) {
             out.edges.push(crate::output::GridEdge {
-                row: e.row - row_lo + 1,
-                col: e.col - col_lo + 1,
+                row: e.row - row_lo,
+                col: e.col - col_lo,
                 fraction: e.fraction,
                 id: e.id,
             });
@@ -109,8 +109,8 @@ pub fn crop(result: &BurnResult, grid: &GridSpec, target: [f64; 4]) -> Option<(B
     for l in &result.lines {
         if in_rows(l.row) && in_cols(l.col) {
             out.lines.push(crate::output::GridLine {
-                row: l.row - row_lo + 1,
-                col: l.col - col_lo + 1,
+                row: l.row - row_lo,
+                col: l.col - col_lo,
                 length: l.length,
                 id: l.id,
             });
@@ -118,7 +118,7 @@ pub fn crop(result: &BurnResult, grid: &GridSpec, target: [f64; 4]) -> Option<(B
     }
     for p in &result.points {
         if in_rows(p.row) && in_cols(p.col) {
-            out.points.push(crate::output::GridPoint { row: p.row - row_lo + 1, col: p.col - col_lo + 1, id: p.id });
+            out.points.push(crate::output::GridPoint { row: p.row - row_lo, col: p.col - col_lo, id: p.id });
         }
     }
     out.notes = result.notes.clone();
@@ -174,13 +174,13 @@ mod tests {
         }
     }
 
-    // Slice rows [r0,r1] x cols [c0,c1] (1-based inclusive) from a full
+    // Slice rows r0..r1 x cols c0..c1 (0-based, half-open) from a full
     // row-major buffer with `ncol` columns.
     fn slice(full: &[f64], ncol: i32, r0: i32, r1: i32, c0: i32, c1: i32) -> Vec<f64> {
         let mut out = Vec::new();
-        for r in r0..=r1 {
-            for c in c0..=c1 {
-                out.push(full[((r - 1) * ncol + (c - 1)) as usize]);
+        for r in r0..r1 {
+            for c in c0..c1 {
+                out.push(full[(r * ncol + c) as usize]);
             }
         }
         out
@@ -194,15 +194,15 @@ mod tests {
     }
 
     #[test]
-    fn rebases_indices_to_one() {
+    fn rebases_indices_to_zero() {
         let (sub, g) = crop(&box_result(), &grid10(), [3.0, 5.0, 7.0, 9.0]).unwrap();
         for r in &sub.runs {
-            assert!(r.row >= 1 && r.row <= g.nrow as i32);
-            assert!(r.col_start >= 1 && r.col_end <= g.ncol as i32);
+            assert!(r.row >= 0 && r.row < g.nrow as i32);
+            assert!(r.col_start >= 0 && r.col_start < r.col_end && r.col_end <= g.ncol as i32);
         }
         for e in &sub.edges {
-            assert!(e.row >= 1 && e.row <= g.nrow as i32);
-            assert!(e.col >= 1 && e.col <= g.ncol as i32);
+            assert!(e.row >= 0 && e.row < g.nrow as i32);
+            assert!(e.col >= 0 && e.col < g.ncol as i32);
         }
     }
 
@@ -211,8 +211,8 @@ mod tests {
         let r = box_result();
         let full = dense(&r, &grid10());
         let (sub, g) = crop(&r, &grid10(), [3.0, 5.0, 7.0, 9.0]).unwrap();
-        // window x in [3,7], y in [5,9] -> rows 2..5, cols 4..7 (1-based)
-        approx_eq(&dense(&sub, &g), &slice(&full, 10, 2, 5, 4, 7));
+        // window x in [3,7], y in [5,9] -> rows 1..5, cols 3..7 (0-based, half-open)
+        approx_eq(&dense(&sub, &g), &slice(&full, 10, 1, 5, 3, 7));
     }
 
     #[test]
@@ -222,8 +222,8 @@ mod tests {
         let (sub, g) = crop(&r, &grid10(), [2.0, 4.0, 6.0, 8.0]).unwrap();
         assert_eq!((g.nrow, g.ncol), (4, 4));
         assert_eq!((g.xmin, g.ymin, g.xmax, g.ymax), (2.0, 4.0, 6.0, 8.0));
-        // y in [4,8] -> rows 3..6, x in [2,6] -> cols 3..6 (1-based)
-        approx_eq(&dense(&sub, &g), &slice(&full, 10, 3, 6, 3, 6));
+        // y in [4,8] -> rows 2..6, x in [2,6] -> cols 2..6 (0-based, half-open)
+        approx_eq(&dense(&sub, &g), &slice(&full, 10, 2, 6, 2, 6));
     }
 
     #[test]
@@ -246,15 +246,15 @@ mod tests {
 
     #[test]
     fn clips_and_rebases_runs() {
-        // polygon covering the whole grid: every row is one run, cols 1..10
+        // polygon covering the whole grid: every row is one run, cols 0..10
         let r = burn(&[box_poly(0.0, 0.0, 10.0, 10.0)], &grid10(), BurnOptions::default()).unwrap();
         assert!(r.edges.is_empty()); // grid-aligned -> pure interior
         let full = dense(&r, &grid10());
         let (sub, g) = crop(&r, &grid10(), [3.0, 3.0, 7.0, 7.0]).unwrap();
         assert_eq!((g.nrow, g.ncol), (4, 4));
-        assert!(sub.runs.iter().all(|x| x.col_start >= 1 && x.col_end <= 4));
-        assert!(sub.runs.iter().all(|x| x.row >= 1 && x.row <= 4));
-        approx_eq(&dense(&sub, &g), &slice(&full, 10, 4, 7, 4, 7));
+        assert!(sub.runs.iter().all(|x| x.col_start >= 0 && x.col_end <= 4));
+        assert!(sub.runs.iter().all(|x| x.row >= 0 && x.row < 4));
+        approx_eq(&dense(&sub, &g), &slice(&full, 10, 3, 7, 3, 7));
     }
 
     #[test]
@@ -271,7 +271,7 @@ mod tests {
         assert_eq!((g.nrow, g.ncol), (4, 4));
         assert!(!sub.lines.is_empty());
         assert!(sub.lines.len() <= r.lines.len());
-        assert!(sub.lines.iter().all(|l| l.row >= 1 && l.row <= 4 && l.col >= 1 && l.col <= 4));
+        assert!(sub.lines.iter().all(|l| l.row >= 0 && l.row < 4 && l.col >= 0 && l.col < 4));
     }
 
     #[test]
@@ -281,6 +281,6 @@ mod tests {
         let (sub, _) = crop(&r, &grid10(), [4.0, 4.0, 8.0, 8.0]).unwrap();
         // only (5.5, 5.5) falls inside the window
         assert_eq!(sub.points.len(), 1);
-        assert!(sub.points.iter().all(|p| p.row >= 1 && p.row <= 4 && p.col >= 1 && p.col <= 4));
+        assert!(sub.points.iter().all(|p| p.row >= 0 && p.row < 4 && p.col >= 0 && p.col < 4));
     }
 }
