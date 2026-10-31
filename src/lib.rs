@@ -73,6 +73,7 @@ mod approx;
 mod burn;
 mod coalesce;
 mod coverage;
+mod crop;
 mod ee;
 mod error;
 #[cfg(feature = "geo-types")]
@@ -90,6 +91,7 @@ mod wkb;
 
 pub use burn::{burn, burn_wkb, BurnMode, BurnOptions};
 pub use coalesce::coalesce_runs;
+pub use crop::crop;
 pub use error::{BurnError, WkbError};
 pub use geometry::{is_ccw, signed_area, Coord, CoordSeq, Geometry, Polygon};
 pub use grid::GridSpec;
