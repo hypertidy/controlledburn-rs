@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+- **`crop` is public, and 0-based.** `src/crop.rs` (the Rust analogue of R's
+  `crop_burn()` and Python's `BurnResult.crop()`) was never declared in
+  `lib.rs`, so it was not compiled, and it still used the 1-based,
+  inclusive indices of the tables before the switch to 0-based, half-open
+  runs. It is now `controlledburn::crop`, re-bases to the window's top-left
+  cell as row 0, col 0, and keeps runs half-open. A property test checks
+  that cropping then materializing equals slicing the full raster, bit for
+  bit, on random windows of a non-dyadic grid (`tests/crop.rs`). The book's
+  crop chapter is now in its table of contents, so its examples are tested.
+- **Canonical tables for the C++ core.** `tests/canon.rs` generates 240
+  lattice-biased cases (rings with vertices on corners, walls and centre
+  lines, holes, multipolygons, lines, points) on non-dyadic grids and keeps
+  `fixtures/canon-tables.txt`, every record of both modes in parity mode,
+  current. The C++ core checks itself against the same file
+  (hypertidy/controlledburn `cpp/tests/test_canon_tables.cpp`): at this
+  commit all 6737 records agree, fractions as bits. The file freezes the
+  inputs as well as the outputs: the check re-burns the recorded grid and
+  WKB bits rather than regenerating them, because the generator uses the
+  platform's `sin` and `cos`, which differ in the last bit between Linux,
+  macOS and Windows.
+
 ## 0.2.4
 
 - **`Measure`: spherical area for grids whose rows are parallels.**
