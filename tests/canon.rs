@@ -222,31 +222,72 @@ fn tables(r: &BurnResult, s: &mut String) {
     }
 }
 
+const HEADER: &str = "# canonical tables from controlledburn-rs tests/canon.rs; do not edit\n";
+
+/// Burn one case in both modes and append its block to `s`.
+fn emit(s: &mut String, name: &str, grid: &GridSpec, blobs: &[Vec<u8>]) {
+    let _ = writeln!(s, "case {name}");
+    let _ = writeln!(
+        s,
+        "grid {:016x} {:016x} {:016x} {:016x} {} {}",
+        grid.xmin.to_bits(),
+        grid.ymin.to_bits(),
+        grid.xmax.to_bits(),
+        grid.ymax.to_bits(),
+        grid.ncol,
+        grid.nrow
+    );
+    for b in blobs {
+        let _ = writeln!(s, "wkb {}", hexs(b));
+    }
+    for (label, mode) in [("coverage", BurnMode::Coverage), ("approx", BurnMode::Approx)] {
+        let r = burn_wkb(blobs.iter().map(|b| b.as_slice()), grid, BurnOptions::parity(mode)).unwrap();
+        assert!(r.notes.is_empty(), "{name}: {:?}", r.notes);
+        let _ = writeln!(s, "mode {label}");
+        tables(&r, s);
+    }
+    s.push_str("end\n");
+}
+
+/// Generate the cases and render the whole file. The generator uses the
+/// platform's `sin`/`cos`, so it only runs when writing the file; checks
+/// read the frozen inputs back from the file.
 fn render() -> String {
-    let mut s = String::from("# canonical tables from controlledburn-rs tests/canon.rs; do not edit\n");
+    let mut s = String::from(HEADER);
     for (name, grid, geoms) in cases() {
-        let _ = writeln!(s, "case {name}");
-        let _ = writeln!(
-            s,
-            "grid {:016x} {:016x} {:016x} {:016x} {} {}",
-            grid.xmin.to_bits(),
-            grid.ymin.to_bits(),
-            grid.xmax.to_bits(),
-            grid.ymax.to_bits(),
-            grid.ncol,
-            grid.nrow
-        );
         let blobs: Vec<Vec<u8>> = geoms.iter().map(wkb).collect();
-        for b in &blobs {
-            let _ = writeln!(s, "wkb {}", hexs(b));
+        emit(&mut s, &name, &grid, &blobs);
+    }
+    s
+}
+
+fn unhex(h: &str) -> Vec<u8> {
+    (0..h.len()).step_by(2).map(|i| u8::from_str_radix(&h[i..i + 2], 16).unwrap()).collect()
+}
+
+/// Re-burn the inputs recorded in `committed` (grid and WKB, bit exact).
+fn reburn(committed: &str) -> String {
+    let mut s = String::from(HEADER);
+    let mut name = String::new();
+    let mut grid = None;
+    let mut blobs = Vec::new();
+    for line in committed.lines() {
+        let mut it = line.split_whitespace();
+        match it.next() {
+            Some("case") => name = it.next().unwrap().to_string(),
+            Some("grid") => {
+                let v: Vec<&str> = it.collect();
+                let f = |i: usize| f64::from_bits(u64::from_str_radix(v[i], 16).unwrap());
+                grid = Some(GridSpec::new(f(0), f(1), f(2), f(3), v[4].parse().unwrap(), v[5].parse().unwrap()));
+            }
+            Some("wkb") => blobs.push(unhex(it.next().unwrap())),
+            Some("end") => {
+                emit(&mut s, &name, grid.as_ref().unwrap(), &blobs);
+                grid = None;
+                blobs.clear();
+            }
+            _ => {}
         }
-        for (label, mode) in [("coverage", BurnMode::Coverage), ("approx", BurnMode::Approx)] {
-            let r = burn_wkb(blobs.iter().map(|b| b.as_slice()), &grid, BurnOptions::parity(mode)).unwrap();
-            assert!(r.notes.is_empty(), "{name}: {:?}", r.notes);
-            let _ = writeln!(s, "mode {label}");
-            tables(&r, &mut s);
-        }
-        s.push_str("end\n");
     }
     s
 }
@@ -254,12 +295,13 @@ fn render() -> String {
 #[test]
 fn canonical_tables_are_current() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/canon-tables.txt");
-    let now = render();
     if std::env::var_os("CANON_WRITE").is_some() {
-        std::fs::write(&path, &now).unwrap();
+        std::fs::write(&path, render()).unwrap();
         return;
     }
     let committed = std::fs::read_to_string(&path).expect("fixtures/canon-tables.txt (CANON_WRITE=1 to create)");
+    let committed = committed.replace("\r\n", "\n");
+    let now = reburn(&committed);
     if committed != now {
         let line = committed.lines().zip(now.lines()).position(|(a, b)| a != b);
         panic!(

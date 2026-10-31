@@ -17,7 +17,11 @@
   `fixtures/canon-tables.txt`, every record of both modes in parity mode,
   current. The C++ core checks itself against the same file
   (hypertidy/controlledburn `cpp/tests/test_canon_tables.cpp`): at this
-  commit all 6737 records agree, fractions as bits.
+  commit all 6737 records agree, fractions as bits. The file freezes the
+  inputs as well as the outputs: the check re-burns the recorded grid and
+  WKB bits rather than regenerating them, because the generator uses the
+  platform's `sin` and `cos`, which differ in the last bit between Linux,
+  macOS and Windows.
 
 ## 0.2.4
 
