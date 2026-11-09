@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **`slice_tiles`: a burn cut into a regular tile grid in one pass.**
+  Each record goes to tile `(row / tile_nrow, col / tile_ncol)` with local
+  indices, and runs are split at tile column seams. Only non-empty tiles
+  are returned, each with its offset and its own `GridSpec`. A property
+  test checks every tile against `crop` record for record, and the
+  reassembled tiles against the whole raster bit for bit
+  (`tests/tiles.rs`). The README's Chunking recipe used to loop `crop`
+  over the tiles, which scans every record for every tile; it now uses
+  `slice_tiles`.
 - **`crop` is public, and 0-based.** `src/crop.rs` (the Rust analogue of R's
   `crop_burn()` and Python's `BurnResult.crop()`) was never declared in
   `lib.rs`, so it was not compiled, and it still used the 1-based,

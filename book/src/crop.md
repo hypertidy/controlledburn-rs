@@ -69,3 +69,29 @@ This mirrors the R package's `crop_burn()` and the Python
 `BurnResult.crop()`, with one deliberate difference: those bindings order
 `target` as `[xmin, xmax, ymin, ymax]`, while the Rust crate uses
 `[xmin, ymin, xmax, ymax]` to line up with `GridSpec`.
+
+## Many tiles: `slice_tiles`
+
+`crop` scans the whole result on each call, which is right for one window
+but costs O(records × tiles) when it is looped over a tile grid.
+`slice_tiles` cuts the result into a regular grid of tiles in one pass and
+returns only the tiles that hold records. Each one has the same tables
+`crop` would give for that window:
+
+```rust
+# extern crate controlledburn;
+use controlledburn::{burn, crop, slice_tiles, BurnOptions, Coord, Geometry, GridSpec, Polygon};
+
+let square = Geometry::Polygon(Polygon::new(vec![vec![
+    Coord::new(2.5, 4.5), Coord::new(6.5, 4.5), Coord::new(6.5, 8.5),
+    Coord::new(2.5, 8.5), Coord::new(2.5, 4.5),
+]]));
+let grid = GridSpec::new(0.0, 0.0, 10.0, 10.0, 10, 10);
+let r = burn(&[square], &grid, BurnOptions::default()).unwrap();
+
+for t in slice_tiles(&r, &grid, 4, 4) {
+    let window = [t.grid.xmin, t.grid.ymin, t.grid.xmax, t.grid.ymax];
+    let (c, _) = crop(&r, &grid, window).unwrap();
+    assert_eq!((t.result.runs, t.result.edges), (c.runs, c.edges));
+}
+```
