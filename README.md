@@ -52,6 +52,50 @@ coastlines in several projections, along with what each costs to store
 in tiles; its "runs of whole cells plus a list of edge fractions" is
 this crate's runs and edges tables.
 
+## Chunking
+
+A grid is four numbers and two counts: the extent `xmin, ymin, xmax,
+ymax` and `ncol, nrow`. That fixes every cell edge, so a tile, chunk or
+window is a range of rows and columns, and its extent is integer
+arithmetic on the grid. The burn output is sparse and indexed on the
+whole grid, so it is already chunkable: burn once, then cut out any set
+of tiles with `crop` and `materialize` each one. Tiles never need a
+second burn, and each geometry is walked once however many tiles it
+spans.
+
+```rust
+let r = burn(&geoms, &grid, BurnOptions::default())?;
+let (tc, tr) = (256, 256); // tile shape in cells
+let (dx, dy) = (grid.dx(), grid.dy());
+for r0 in (0..grid.nrow).step_by(tr) {
+    for c0 in (0..grid.ncol).step_by(tc) {
+        let (r1, c1) = ((r0 + tr as u32).min(grid.nrow), (c0 + tc as u32).min(grid.ncol));
+        let extent = [
+            grid.xmin + c0 as f64 * dx, grid.ymax - r1 as f64 * dy,
+            grid.xmin + c1 as f64 * dx, grid.ymax - r0 as f64 * dy,
+        ];
+        let (tile, tgrid) = crop(&r, &grid, extent).unwrap();
+        let mut buf = vec![f64::NAN; (tgrid.ncol * tgrid.nrow) as usize];
+        materialize(&tile, &mut buf, tgrid.ncol, tgrid.nrow, None, &opts)?;
+        // write buf as tile (r0 / tr, c0 / tc)
+    }
+}
+```
+
+The tiles put back together are bit-identical to materializing the
+whole grid. Any set of tile extents works the same way, regular or not.
+
+- *Parallel*: split the geometries across workers, burn each subset
+  onto the same grid, add the subset's start offset to `id`, and
+  concatenate the tables. Records are per geometry, so nothing needs
+  merging.
+- *Output too large to hold*: burn a batch of geometries, crop it into
+  tiles, write them, drop the batch. Memory is bounded by the batch's
+  perimeter, not by the grid.
+- *Dense windows*: `CoverageWindow` resolves coverage straight into a
+  window given by its integer row and column offsets, and a sub-window
+  equals those cells of the whole (`tests/window.rs`).
+
 ## Features
 
 - `serde`: `Serialize`/`Deserialize` on the public types.
