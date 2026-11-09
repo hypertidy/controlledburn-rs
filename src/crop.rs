@@ -8,6 +8,10 @@
 //! chains straight into [`crate::materialize`] to cut a tile from a single
 //! burn.
 //!
+//! Each call scans the whole result. To cut a regular grid of tiles, use
+//! [`crate::slice_tiles`], which does it in one pass; calling `crop` per
+//! tile costs O(records × tiles).
+//!
 //! Unlike the R/Python bindings, a [`BurnResult`] carries no grid metadata,
 //! so the grid the result was burned into is passed explicitly and the
 //! snapped sub-grid is returned alongside the cropped tables.
