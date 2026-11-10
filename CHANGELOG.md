@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Coverage mode reuses its buffers from one polygon to the next**
+  rather than allocating per ring, row and boundary cell: about 2x faster
+  on many small polygons (small-1e5 4.11 s to 1.96 s, rock outcrops at
+  32 m 2.27 s to 1.20 s), level with burnscars, output bit-identical.
+  `tests/alloc.rs` pins it.
 - **`slice_tiles`: a burn cut into a regular tile grid in one pass.**
   Each record goes to tile `(row / tile_nrow, col / tile_ncol)` with local
   indices, and runs are split at tile column seams. Only non-empty tiles
