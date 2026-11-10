@@ -32,7 +32,9 @@ assert!((r.covered_cells() * grid.dx() * grid.dy() - 16.0).abs() < 1e-5);
 ```
 
 Indices are 0-based with row 0 at the top, run ranges are half-open,
-and geometry `k` in the input has `id = k`. WKB input (ISO and EWKB,
+and geometry `k` in the input has `id = k` (`id_offset + k` with
+`BurnOptions::with_id_offset`). A multi-part geometry has one record per
+cell: parts crossing the same cell are summed. WKB input (ISO and EWKB,
 both byte orders, Z/M skipped) goes through `burn_wkb`.
 
 ## Modes
@@ -78,8 +80,8 @@ are not a regular grid, use `crop`. It returns the same tables but scans
 the whole result on every call, so don't loop it over a tile grid.
 
 - *Parallel*: split the geometries across workers, burn each subset
-  onto the same grid, add the subset's start offset to `id`, and
-  concatenate the tables. Records are per geometry, so nothing needs
+  onto the same grid with `BurnOptions::default().with_id_offset(start)`,
+  and concatenate the tables. Records are per geometry, so nothing needs
   merging.
 - *Output too large to hold*: burn a batch of geometries, slice it into
   tiles, merge each tile into the output, drop the batch. A tile can
@@ -99,9 +101,14 @@ the whole result on every call, so don't loop it over a tile grid.
 - Unclosed polygon rings are closed by appending the first coordinate.
 - Geometries with non-finite coordinates are skipped with a note (the
   C++ walker does not terminate on a NaN vertex).
-- Adjacent runs on a row are coalesced by default;
-  `BurnOptions::parity(mode)` turns that off for record-for-record
-  equality with the C++ tables.
+- Adjacent runs on a row are coalesced by default, and a multi-part
+  geometry has one record per cell (the parts' fractions or lengths
+  summed, a sum reaching a full cell becoming a run; overlapping parts
+  are capped at a full cell, not unioned). `BurnOptions::parity(mode)`
+  turns both off for record-for-record equality with the C++ tables.
+- Rings of fewer than 4 coordinates once closed, and lines of one
+  coordinate, are skipped with a note; the C++ core skips them silently.
+  An all-NaN point (WKB `POINT EMPTY`) is empty, not non-finite.
 - Indices are 0-based, run ranges half-open and `id = k`, the same as the
   C++ core and the Python package; the R package adds 1 (1-based indices,
   inclusive `col_end`, `id = k + 1`). The golden file predates the C++

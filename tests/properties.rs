@@ -528,12 +528,59 @@ proptest! {
             Polygon::new(vec![b.iter().map(|&p| Coord::from(p)).collect()]),
         ]);
         for mode in [BurnMode::Coverage, BurnMode::Approx] {
-            let got = burn(std::slice::from_ref(&mp), &g.spec, BurnOptions::default().with_mode(mode)).unwrap();
+            let opts = BurnOptions::default().with_mode(mode).with_merge_parts(false);
+            let got = burn(std::slice::from_ref(&mp), &g.spec, opts).unwrap();
             let par = burn(std::slice::from_ref(&mp), &g.spec, BurnOptions::parity(mode)).unwrap();
             let mut want = par.runs.clone();
             coalesce_runs(&mut want);
             prop_assert_eq!(&got.runs, &want, "{:?} runs\n{}\n{}\n{}", mode, fmt_grid(&g), fmt_ring(&a), fmt_ring(&b));
             prop_assert_eq!(&got.edges, &par.edges, "{:?} edges", mode);
+        }
+    }
+
+    /// The default output of a multipolygon is the parity output summed per
+    /// cell: a cell that a part covers fully is a run; otherwise the parts'
+    /// fractions summed in part order (f32, bit for bit) make an edge, or a
+    /// run once they reach 1 - 1e-6. One record per cell.
+    #[test]
+    fn multipolygon_parts_merge_per_cell(((g, a), (_, b)) in grid().prop_flat_map(|g| (ring_on(g.clone()), ring_on(g)))) {
+        use std::collections::BTreeMap;
+        let mp = Geometry::MultiPolygon(vec![
+            Polygon::new(vec![a.iter().map(|&p| Coord::from(p)).collect()]),
+            Polygon::new(vec![b.iter().map(|&p| Coord::from(p)).collect()]),
+        ]);
+        for mode in [BurnMode::Coverage, BurnMode::Approx] {
+            let got = burn(std::slice::from_ref(&mp), &g.spec, BurnOptions::default().with_mode(mode)).unwrap();
+            let par = burn(std::slice::from_ref(&mp), &g.spec, BurnOptions::parity(mode)).unwrap();
+            // expected: Some(f) an edge, None a full cell
+            let mut want: BTreeMap<(i32, i32), Option<f32>> = BTreeMap::new();
+            for r in &par.runs {
+                for c in r.col_start..r.col_end {
+                    want.insert((r.row, c), None);
+                }
+            }
+            for e in &par.edges {
+                if let Some(v) = want.entry((e.row, e.col)).or_insert(Some(0.0)) {
+                    *v += e.fraction;
+                }
+            }
+            for v in want.values_mut() {
+                if matches!(v, Some(f) if *f >= 1.0 - 1e-6) {
+                    *v = None;
+                }
+            }
+            let mut have: BTreeMap<(i32, i32), Option<f32>> = BTreeMap::new();
+            for r in &got.runs {
+                for c in r.col_start..r.col_end {
+                    prop_assert!(have.insert((r.row, c), None).is_none(), "{:?}: two records in ({}, {})", mode, r.row, c);
+                }
+            }
+            for e in &got.edges {
+                prop_assert!(have.insert((e.row, e.col), Some(e.fraction)).is_none(), "{:?}: two records in ({}, {})", mode, e.row, e.col);
+            }
+            prop_assert_eq!(&have, &want, "{:?}\n{}\n{}\n{}", mode, fmt_grid(&g), fmt_ring(&a), fmt_ring(&b));
+            // runs coalesced: none touches the next on its row
+            prop_assert!(got.runs.windows(2).all(|w| w[0].row != w[1].row || w[0].col_end < w[1].col_start));
         }
     }
 }

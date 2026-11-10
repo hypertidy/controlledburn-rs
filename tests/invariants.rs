@@ -208,7 +208,11 @@ fn degenerate_inputs() {
     let collinear = poly(vec![vec![(1., 1.), (5., 5.), (9., 9.), (1., 1.)]]);
     let two = poly(vec![vec![(1., 1.), (5., 5.)]]);
     let r = burn(&[collinear, two], &G10, BurnOptions::default()).unwrap();
-    assert!(r.is_empty() && r.notes.is_empty());
+    // zero area: nothing, silently; too short to be a ring: nothing, with a note
+    assert!(r.is_empty());
+    assert_eq!(r.notes.len(), 1);
+    assert_eq!(r.notes[0].geom_index, 1);
+    assert!(r.notes[0].message.contains("3 coordinates when closed"), "{}", r.notes[0].message);
     assert!(burn(&[], &GridSpec::new(0., 0., 0., 10., 1, 1), BurnOptions::default()).is_err());
 }
 

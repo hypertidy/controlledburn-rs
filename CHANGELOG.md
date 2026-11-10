@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- **One record per cell for multi-part geometries** (`BurnOptions::merge_parts`,
+  on by default). The parts of a multipolygon were burned one by one, so
+  a cell two parts cross had two edges: two halves either side of a shared
+  border came out as 0.5 + 0.5 rather than a full cell, and an overlap
+  stacked an edge on a run. The parts' edges are now summed per cell (in
+  part order), a sum reaching a full cell becomes a run, edges inside
+  another part's run are dropped, and the runs are coalesced. Line parts
+  are summed per cell the same way. Overlapping parts are capped at a full
+  cell, not unioned. On the rock outcrops at 32 m this merges 18 records,
+  and the 14 cells that differed from burnscars by float rounding are now
+  bit-equal. `parity()` turns it off: the C++ core keeps per-part records.
+- **Notes for skipped rings and lines.** A ring of fewer than 4
+  coordinates once closed (its part, if it is an exterior; itself, if a
+  hole) and a one-coordinate line were skipped silently; each now gets a
+  note, and the rest of the geometry is still burned. An all-NaN point
+  (WKB `POINT EMPTY`) is empty: it was noted as non-finite.
+- **`BurnOptions::id_offset`.** Ids are `id_offset + k`, notes included, so
+  burns of consecutive slices of a collection concatenate without
+  renumbering. A negative offset, or ids past `i32::MAX`, is the new
+  `BurnError::InvalidOptions`. `BurnOptions` gains two public fields, so
+  struct literals need `..Default::default()`.
 - **Coverage mode reuses its buffers from one polygon to the next**
   rather than allocating per ring, row and boundary cell: about 2x faster
   on many small polygons (small-1e5 4.11 s to 1.96 s, rock outcrops at

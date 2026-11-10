@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-/// The only fatal error a burn can raise: an invalid grid or buffer.
+/// The fatal errors: an invalid grid, buffer or options.
 /// Everything else is reported per geometry in `BurnResult::notes`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BurnError {
@@ -12,6 +12,9 @@ pub enum BurnError {
     InvalidBuffer(String),
     /// `materialize` saw a geometry id beyond the supplied values.
     IdOutOfRange { id: i32, values: usize },
+    /// A `BurnOptions` value is out of range (`id_offset` negative, or
+    /// ids beyond `i32::MAX`).
+    InvalidOptions(String),
 }
 
 impl fmt::Display for BurnError {
@@ -22,6 +25,7 @@ impl fmt::Display for BurnError {
             BurnError::IdOutOfRange { id, values } => {
                 write!(f, "materialize: geometry id {id} exceeds values size {values}")
             }
+            BurnError::InvalidOptions(m) => write!(f, "invalid options: {m}"),
         }
     }
 }

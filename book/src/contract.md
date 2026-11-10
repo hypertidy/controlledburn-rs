@@ -33,7 +33,10 @@ let r = burn(&[square], &grid, BurnOptions::default()).unwrap();
 
 Geometry `k` in the input slice has `id = k` in every table, so the
 tables join back to whatever attributes came with the geometries by
-position.
+position. (`BurnOptions::with_id_offset(n)` makes it `n + k`, for burns
+of consecutive slices that are concatenated.) A cell has at most one
+record per id: the parts of a multipolygon that cross the same cell are
+summed into one edge, or one run if together they cover it.
 
 ## Output
 
@@ -72,8 +75,8 @@ assert_eq!((corners, sides), (4, 12));
 
 `lines` and `points` are empty for polygon input; they are the subject
 of a [later chapter](lines-and-points.md). `notes` is empty too: it
-carries per-geometry problems (unparseable WKB, non-finite coordinates)
-that do not stop the burn.
+carries per-geometry problems (unparseable WKB, non-finite coordinates,
+rings or lines too short to burn) that do not stop the burn.
 
 ![The square on the grid: runs shaded solid, edges shaded by fraction](img/contract.png)
 
