@@ -11,7 +11,7 @@ use crate::ee::bbox::BBox;
 use crate::geometry::{is_ccw, Coord, Polygon};
 use crate::grid::Grid;
 use crate::output::{GridEdge, GridRun};
-use crate::walker::{walk_polyline, Traversal};
+use crate::walker::{Traversal, Walker};
 
 /// Per-cell boundary data for the winding sweep. `col` is the 0-based
 /// column in the full grid; padding columns are -1 and ncol.
@@ -24,6 +24,35 @@ struct BoundaryCellRecord {
     winding_delta: i32,
     /// The ring (0 the exterior) the record comes from.
     ring: u32,
+}
+
+/// Buffers for coverage-mode polygons, reused from one polygon to the
+/// next (one per `burn` call, or per worker). Burning many small polygons
+/// otherwise spends much of its time allocating: per ring, per sub-grid
+/// row and per boundary cell.
+#[derive(Default)]
+pub(crate) struct CoverageScratch {
+    walker: Walker,
+    row_data: Vec<Vec<BoundaryCellRecord>>,
+    left_dy: Vec<Vec<(usize, f64)>>,
+    valid: Vec<Traversal>,
+    merged: Vec<BoundaryCellRecord>,
+    ring_winding: Vec<i32>,
+    touched: Vec<u32>,
+    through: Vec<(u32, i32)>,
+    spans: Vec<(usize, usize)>,
+}
+
+/// The first `n` rows of `rows`, emptied, growing it if needed.
+fn rows_cleared<T>(rows: &mut Vec<Vec<T>>, n: usize) -> &mut [Vec<T>] {
+    if rows.len() < n {
+        rows.resize_with(n, Vec::new);
+    }
+    let rows = &mut rows[..n];
+    for r in rows.iter_mut() {
+        r.clear();
+    }
+    rows
 }
 
 pub(crate) fn ring_envelope(ring: &[Coord]) -> BBox {
@@ -84,14 +113,14 @@ fn along_walls(bbox: &BBox, tc: &[Coord]) -> bool {
 /// chaser then returned the complement of the sliver, a whole cell too
 /// much (controlledburn-rs#6). This is the identity `CoverageWindow` uses,
 /// applied to the walker's traversals.
-fn green_fraction(bbox: &BBox, lists: &[&[Coord]], left_dy: f64) -> f64 {
+fn green_fraction(bbox: &BBox, traversals: &[Traversal], arena: &[Coord], left_dy: f64) -> f64 {
     let (w, h) = (bbox.width(), bbox.height());
     if !(w > 0.0 && h > 0.0) {
         return 0.0;
     }
     let mut a = 0.0;
-    for tc in lists {
-        for s in tc.windows(2) {
+    for t in traversals {
+        for s in t.coords(arena).windows(2) {
             let xm = 0.5 * ((s[0].x - bbox.xmax) + (s[1].x - bbox.xmax));
             a += xm * (s[1].y - s[0].y);
         }
@@ -106,11 +135,11 @@ fn green_fraction(bbox: &BBox, lists: &[&[Coord]], left_dy: f64) -> f64 {
 /// to `row_data` (indexed by sub-grid row).
 #[allow(clippy::too_many_arguments)]
 fn walk_ring(
-    mut coords: Vec<Coord>,
+    coords: &[Coord],
     ccw: bool,
     ring: u32,
     grid: &Grid<1>,
-    row_data: &mut [Vec<BoundaryCellRecord>],
+    sc: &mut CoverageScratch,
     sub_rows: usize,
     sub_cols: usize,
     col_off: usize,
@@ -118,9 +147,12 @@ fn walk_ring(
     if coords.len() < 4 {
         return Ok(());
     }
+    let CoverageScratch { walker, row_data, left_dy, valid, .. } = sc;
+    walker.input.clear();
+    walker.input.extend_from_slice(coords);
     // Normalise to CCW so "left of travel" is the interior.
     if !ccw {
-        coords.reverse();
+        walker.input.reverse();
     }
     let is_exterior = ring == 0;
     let coverage_factor: f32 = if is_exterior { 1.0 } else { -1.0 };
@@ -128,15 +160,14 @@ fn walk_ring(
     // the sweep's tolerance on a cell's coverage (`process_polygon`)
     let tol: f32 = 1e-6;
 
-    let cells = walk_polyline(coords, grid, true)?;
+    walker.walk(grid, true)?;
+    let cells = &walker.cells;
     let arena = cells.coords.as_slice();
-    let mut valid: Vec<&Traversal> = Vec::with_capacity(8);
-    let mut lists: Vec<&[Coord]> = Vec::with_capacity(8);
 
     // Net height of the ring's traversals in each cell, by row, then
     // summed from the left: `left_dy[sub_r]` holds (padded column, sum of
     // the heights of the cells left of it in that row). See `green_fraction`.
-    let mut left_dy: Vec<Vec<(usize, f64)>> = vec![Vec::new(); sub_rows];
+    let left_dy = rows_cleared(left_dy, sub_rows);
     for cr in &cells.records {
         if cr.row < 1 || cr.row > sub_rows {
             continue;
@@ -152,7 +183,7 @@ fn walk_ring(
             .sum();
         left_dy[cr.row - 1].push((cr.col, dy));
     }
-    for row in &mut left_dy {
+    for row in left_dy.iter_mut() {
         row.sort_unstable_by_key(|e| e.0);
         let mut acc = 0.0;
         for e in row.iter_mut() {
@@ -188,7 +219,7 @@ fn walk_ring(
         // Valid traversals: proper enter + exit with movement, or a closed
         // ring entirely within this cell.
         valid.clear();
-        valid.extend(cr.traversals.iter().filter(|t| is_valid(t, arena)));
+        valid.extend(cr.traversals.iter().filter(|t| is_valid(t, arena)).copied());
         if valid.is_empty() {
             continue;
         }
@@ -202,11 +233,9 @@ fn walk_ring(
                 frac = analytical_covered_fraction(&cr.bbox, valid[0].coords(arena)) as f32;
             } else {
                 // several traversals, or one along the walls
-                lists.clear();
-                lists.extend(valid.iter().map(|t| t.coords(arena)));
                 let row = &left_dy[sub_r];
                 let left = row[row.partition_point(|e| e.0 < c)].1;
-                frac = green_fraction(&cr.bbox, &lists, left) as f32;
+                frac = green_fraction(&cr.bbox, valid, arena, left) as f32;
             }
         }
 
@@ -255,7 +284,7 @@ fn walk_ring(
         // row centre.
         let y_mid = (cr.bbox.ymin + cr.bbox.ymax) / 2.0;
         let mut winding_delta = 0;
-        for t in &valid {
+        for t in valid.iter() {
             let tc = t.coords(arena);
             if !t.traversed() || tc.len() < 2 {
                 continue;
@@ -290,6 +319,7 @@ pub(crate) fn process_polygon(
     poly_id: i32,
     runs: &mut Vec<GridRun>,
     edges: &mut Vec<GridEdge>,
+    sc: &mut CoverageScratch,
 ) -> Result<(), String> {
     let Some(exterior) = poly.rings.first() else { return Ok(()) };
     if exterior.len() < 4 {
@@ -318,15 +348,16 @@ pub(crate) fn process_polygon(
     let row_off = ((full_grid.ymax() - subgrid_bounded.ymax()) / dy).round() as usize;
     let col_off = ((subgrid_bounded.xmin() - full_grid.xmin()) / dx).round() as usize;
 
-    let mut row_data: Vec<Vec<BoundaryCellRecord>> = vec![Vec::new(); sub_rows];
+    rows_cleared(&mut sc.row_data, sub_rows);
     let n_rings = poly.rings.len();
 
     for (r, ring) in poly.rings.iter().enumerate() {
         if ring.len() < 4 {
             continue;
         }
-        walk_ring(ring.clone(), is_ccw(ring), r as u32, &subgrid, &mut row_data, sub_rows, sub_cols, col_off)?;
+        walk_ring(ring, is_ccw(ring), r as u32, &subgrid, sc, sub_rows, sub_cols, col_off)?;
     }
+    let CoverageScratch { row_data, merged, ring_winding, touched, through, spans, .. } = sc;
 
     // Winding sweep per row.
     let tol: f32 = 1e-6;
@@ -335,11 +366,10 @@ pub(crate) fn process_polygon(
     // Winding per ring, so a boundary cell gains the cover of rings that
     // enclose it without passing through it (the exterior around a hole's
     // boundary cell). Allocated once; each row resets only what it touched.
-    let mut ring_winding: Vec<i32> = vec![0; n_rings];
-    let mut touched: Vec<u32> = Vec::new();
+    ring_winding.clear();
+    ring_winding.resize(n_rings, 0);
+    touched.clear();
     // Rings passing through each merged cell, flat, with a span per cell.
-    let mut through: Vec<(u32, i32)> = Vec::new();
-    let mut spans: Vec<(usize, usize)> = Vec::new();
     let sign = |r: u32| -> i32 {
         if r == 0 {
             1
@@ -348,7 +378,7 @@ pub(crate) fn process_polygon(
         }
     };
 
-    for (sr, row_vec) in row_data.iter_mut().enumerate() {
+    for (sr, row_vec) in row_data[..sub_rows].iter_mut().enumerate() {
         if row_vec.is_empty() {
             continue;
         }
@@ -356,7 +386,7 @@ pub(crate) fn process_polygon(
 
         // Merge same-column entries in push order (stable sort), keeping
         // the rings that pass through each cell (each ring once per cell).
-        let mut merged: Vec<BoundaryCellRecord> = Vec::with_capacity(row_vec.len());
+        merged.clear();
         through.clear();
         spans.clear();
         for rec in row_vec.iter() {
@@ -388,7 +418,7 @@ pub(crate) fn process_polygon(
         let mut prev_col: i64 = -2;
         let full_row = (row_off + sr) as i32;
 
-        for (mc, &(s0, s1)) in merged.iter().zip(&spans) {
+        for (mc, &(s0, s1)) in merged.iter().zip(spans.iter()) {
             let rings = &through[s0..s1];
             // Interior run between the previous boundary cell and this one.
             // prev_col > -2 means at least one cell (including padding) seen.
@@ -427,7 +457,7 @@ pub(crate) fn process_polygon(
                 ring_winding[r as usize] = after;
             }
         }
-        for &r in &touched {
+        for &r in touched.iter() {
             ring_winding[r as usize] = 0;
         }
         touched.clear();

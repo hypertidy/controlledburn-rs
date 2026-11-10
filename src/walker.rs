@@ -189,162 +189,205 @@ fn snap_to_corner(c: Coord, bbox: &BBox, tol_x: f64, tol_y: f64) -> Coord {
     Coord::new(x, y)
 }
 
-pub(crate) fn walk_polyline(mut coords: Vec<Coord>, grid: &Grid<1>, closed: bool) -> Result<Cells, String> {
-    let mut cells = Cells::default();
-    if coords.is_empty() {
-        return Ok(cells);
-    }
-    snap_to_lattice(&mut coords, grid);
-    let n_input = coords.len();
-    // Every input vertex produces at most one arena entry plus one exit
-    // crossing per cell change; reserve generously once.
-    cells.coords.reserve(coords.len() * 2 + 8);
-    let arena = &mut cells.coords;
-    let records = &mut cells.records;
-    let mut index = CellIndex::default();
-    // Cache of the last cell looked up: consecutive visits are usually
-    // the same cell or a neighbour.
-    let mut last: Option<((usize, usize), usize)> = None;
-    let n_rows = grid.rows();
-    let n_cols = grid.cols();
-    // Same tolerance as `snap_to_lattice`, from the grid's cell size (a
-    // padding cell's box is unbounded).
-    let (tol_x, tol_y) = (grid.dx() * 1e-9, grid.dy() * 1e-9);
+pub(crate) fn walk_polyline(coords: Vec<Coord>, grid: &Grid<1>, closed: bool) -> Result<Cells, String> {
+    let mut w = Walker { input: coords, ..Walker::default() };
+    w.walk(grid, closed)?;
+    Ok(w.cells)
+}
 
-    let mut pos: usize = 0;
-    let mut row = grid.get_row(coords[0].y);
-    let mut col = grid.get_column(coords[0].x);
-    let mut last_exit: Option<Coord> = None;
+/// The walk's buffers, kept between walks so that burning many small
+/// rings does not allocate per ring and per cell: the input copy, the
+/// visited cells and their arena, the cell index, and the per-cell
+/// traversal lists (cleared and handed back to the next walk's cells).
+#[derive(Default)]
+pub(crate) struct Walker {
+    /// The coordinates to walk. The caller fills it; the walk snaps it
+    /// and may extend it (the re-append for closed rings).
+    pub input: Vec<Coord>,
+    /// The cells of the last walk.
+    pub cells: Cells,
+    index: CellIndex,
+    spare: Vec<Vec<Traversal>>,
+}
 
-    while pos < coords.len() {
-        if row >= n_rows || col >= n_cols {
-            return Err("walker stepped outside the padded grid".into());
+impl Walker {
+    fn reset(&mut self) {
+        for r in self.cells.records.drain(..) {
+            let mut t = r.traversals;
+            t.clear();
+            self.spare.push(t);
         }
-        let ci = match last {
-            Some((k, i)) if k == (row, col) => i,
-            _ => {
-                let i = *index.entry((row, col)).or_insert_with(|| {
-                    records.push(CellRecord { row, col, bbox: grid.cell(row, col), traversals: Vec::new() });
-                    records.len() - 1
-                });
-                last = Some(((row, col), i));
-                i
-            }
-        };
-        let bbox = records[ci].bbox;
+        self.cells.coords.clear();
+        // Clearing a hash map costs its capacity, not its length: after one
+        // large ring, a run of small ones would each pay for it. Start
+        // afresh once the map is much larger than what the last walk used.
+        if self.index.capacity() > 4 * self.index.len().max(64) {
+            self.index = CellIndex::default();
+        } else {
+            self.index.clear();
+        }
+    }
 
-        let mut trav = Traversal { start: arena.len(), len: 0, entry: None, exit: None };
+    /// Walk `self.input` through `grid`; the visited cells are left in
+    /// `self.cells`. See `walk_polyline`.
+    pub fn walk(&mut self, grid: &Grid<1>, closed: bool) -> Result<(), String> {
+        self.reset();
+        let Walker { input: coords, cells, index, spare } = self;
+        if coords.is_empty() {
+            return Ok(());
+        }
+        snap_to_lattice(coords, grid);
+        let n_input = coords.len();
+        // Every input vertex produces at most one arena entry plus one exit
+        // crossing per cell change; reserve generously once.
+        cells.coords.reserve(coords.len() * 2 + 8);
+        let arena = &mut cells.coords;
+        let records = &mut cells.records;
+        // Cache of the last cell looked up: consecutive visits are usually
+        // the same cell or a neighbour.
+        let mut last: Option<((usize, usize), usize)> = None;
+        let n_rows = grid.rows();
+        let n_cols = grid.cols();
+        // Same tolerance as `snap_to_lattice`, from the grid's cell size (a
+        // padding cell's box is unbounded).
+        let (tol_x, tol_y) = (grid.dx() * 1e-9, grid.dy() * 1e-9);
+
+        let mut pos: usize = 0;
+        let mut row = grid.get_row(coords[0].y);
+        let mut col = grid.get_column(coords[0].x);
+        let mut last_exit: Option<Coord> = None;
 
         while pos < coords.len() {
-            let next = match last_exit {
-                Some(c) => c,
-                None => coords[pos],
+            if row >= n_rows || col >= n_cols {
+                return Err("walker stepped outside the padded grid".into());
+            }
+            let ci = match last {
+                Some((k, i)) if k == (row, col) => i,
+                _ => {
+                    let i = *index.entry((row, col)).or_insert_with(|| {
+                        let traversals = spare.pop().unwrap_or_default();
+                        records.push(CellRecord { row, col, bbox: grid.cell(row, col), traversals });
+                        records.len() - 1
+                    });
+                    last = Some(((row, col), i));
+                    i
+                }
             };
+            let bbox = records[ci].bbox;
 
-            if trav.len == 0 {
-                // First coordinate for this traversal: enter the cell.
-                trav.entry = bbox.side(&next);
-                arena.push(next);
-                trav.len += 1;
-                if last_exit.is_some() {
-                    last_exit = None;
-                } else {
-                    pos += 1;
-                }
-                continue;
-            }
+            let mut trav = Traversal { start: arena.len(), len: 0, entry: None, exit: None };
 
-            if point_location(&bbox, &next) != Location::Outside {
-                arena.push(next);
-                trav.len += 1;
-                if last_exit.is_some() {
-                    last_exit = None;
-                } else {
-                    pos += 1;
-                }
-            } else {
-                // Outside: compute the exit crossing. Use the previous
-                // ORIGINAL vertex for robustness (same as Cell::take).
-                let from = if pos > 0 { coords[pos - 1] } else { arena[arena.len() - 1] };
-                let x = bbox.crossing(&from, &next).ok_or_else(|| String::from("Never get here."))?;
-                let (mut exit_c, mut exit_s) = (x.coord, x.side);
-                // Rounding guard (see snap_to_lattice): a crossing that lies
-                // beyond the segment end can only come from a target that is
-                // outside the box by rounding error. Clamp the target onto
-                // the box and exit there instead of extrapolating.
-                {
-                    let d_next = (next.x - from.x).powi(2) + (next.y - from.y).powi(2);
-                    let d_exit = (exit_c.x - from.x).powi(2) + (exit_c.y - from.y).powi(2);
-                    if !exit_c.x.is_finite() || !exit_c.y.is_finite() || d_exit > d_next * (1.0 + 1e-9) {
-                        exit_c = Coord::new(next.x.clamp(bbox.xmin, bbox.xmax), next.y.clamp(bbox.ymin, bbox.ymax));
-                        exit_s = if next.x < bbox.xmin {
-                            Side::Left
-                        } else if next.x > bbox.xmax {
-                            Side::Right
-                        } else if next.y < bbox.ymin {
-                            Side::Bottom
-                        } else {
-                            Side::Top
-                        };
+            while pos < coords.len() {
+                let next = match last_exit {
+                    Some(c) => c,
+                    None => coords[pos],
+                };
+
+                if trav.len == 0 {
+                    // First coordinate for this traversal: enter the cell.
+                    trav.entry = bbox.side(&next);
+                    arena.push(next);
+                    trav.len += 1;
+                    if last_exit.is_some() {
+                        last_exit = None;
+                    } else {
+                        pos += 1;
                     }
+                    continue;
                 }
-                // Corner guard: an edge through a cell corner gives a
-                // crossing an ulp or two off the corner, on the wall
-                // either side of it. The next cell then starts a sliver
-                // traversal from there to the corner, or from the corner
-                // to a point an ulp down the wall, where the true path
-                // only touches the corner. Its two ends can be out of
-                // order around the cell boundary, which the old chain
-                // chaser read as a slab of the cell or all of it
-                // (controlledburn-rs#6). Exit through the corner itself;
-                // the sliver becomes a single-point touch, which the
-                // coverage pass already ignores.
-                exit_c = snap_to_corner(exit_c, &bbox, tol_x, tol_y);
-                arena.push(exit_c);
-                trav.len += 1;
-                trav.exit = Some(exit_s);
-                if exit_c != next {
-                    last_exit = Some(exit_c);
+
+                if point_location(&bbox, &next) != Location::Outside {
+                    arena.push(next);
+                    trav.len += 1;
+                    if last_exit.is_some() {
+                        last_exit = None;
+                    } else {
+                        pos += 1;
+                    }
+                } else {
+                    // Outside: compute the exit crossing. Use the previous
+                    // ORIGINAL vertex for robustness (same as Cell::take).
+                    let from = if pos > 0 { coords[pos - 1] } else { arena[arena.len() - 1] };
+                    let x = bbox.crossing(&from, &next).ok_or_else(|| String::from("Never get here."))?;
+                    let (mut exit_c, mut exit_s) = (x.coord, x.side);
+                    // Rounding guard (see snap_to_lattice): a crossing that lies
+                    // beyond the segment end can only come from a target that is
+                    // outside the box by rounding error. Clamp the target onto
+                    // the box and exit there instead of extrapolating.
+                    {
+                        let d_next = (next.x - from.x).powi(2) + (next.y - from.y).powi(2);
+                        let d_exit = (exit_c.x - from.x).powi(2) + (exit_c.y - from.y).powi(2);
+                        if !exit_c.x.is_finite() || !exit_c.y.is_finite() || d_exit > d_next * (1.0 + 1e-9) {
+                            exit_c = Coord::new(next.x.clamp(bbox.xmin, bbox.xmax), next.y.clamp(bbox.ymin, bbox.ymax));
+                            exit_s = if next.x < bbox.xmin {
+                                Side::Left
+                            } else if next.x > bbox.xmax {
+                                Side::Right
+                            } else if next.y < bbox.ymin {
+                                Side::Bottom
+                            } else {
+                                Side::Top
+                            };
+                        }
+                    }
+                    // Corner guard: an edge through a cell corner gives a
+                    // crossing an ulp or two off the corner, on the wall
+                    // either side of it. The next cell then starts a sliver
+                    // traversal from there to the corner, or from the corner
+                    // to a point an ulp down the wall, where the true path
+                    // only touches the corner. Its two ends can be out of
+                    // order around the cell boundary, which the old chain
+                    // chaser read as a slab of the cell or all of it
+                    // (controlledburn-rs#6). Exit through the corner itself;
+                    // the sliver becomes a single-point touch, which the
+                    // coverage pass already ignores.
+                    exit_c = snap_to_corner(exit_c, &bbox, tol_x, tol_y);
+                    arena.push(exit_c);
+                    trav.len += 1;
+                    trav.exit = Some(exit_s);
+                    if exit_c != next {
+                        last_exit = Some(exit_c);
+                    }
+                    break;
                 }
-                break;
+            }
+
+            // Force exit if stuck on the boundary (Cell::force_exit).
+            if trav.exit.is_none() && trav.len > 0 {
+                let last = arena[arena.len() - 1];
+                if point_location(&bbox, &last) == Location::Boundary {
+                    trav.exit = bbox.side(&last);
+                }
+            }
+
+            let exited = trav.exit.is_some();
+            let incomplete = exited && trav.entry.is_none();
+
+            if incomplete && closed {
+                // A closed ring is reprocessed at most once per starting cell;
+                // if the coordinate list keeps growing the walk is not converging.
+                if coords.len() > 4 * n_input + 64 {
+                    return Err("ring walk did not converge (vertex on cell boundary?)".into());
+                }
+                coords.extend_from_slice(trav.coords(arena));
+            }
+
+            let exit_side = trav.exit;
+            records[ci].traversals.push(trav);
+
+            if exited {
+                match exit_side {
+                    Some(Side::Top) => row = row.checked_sub(1).ok_or("walker stepped above the padded grid")?,
+                    Some(Side::Bottom) => row += 1,
+                    Some(Side::Left) => col = col.checked_sub(1).ok_or("walker stepped left of the padded grid")?,
+                    Some(Side::Right) => col += 1,
+                    None => {}
+                }
             }
         }
 
-        // Force exit if stuck on the boundary (Cell::force_exit).
-        if trav.exit.is_none() && trav.len > 0 {
-            let last = arena[arena.len() - 1];
-            if point_location(&bbox, &last) == Location::Boundary {
-                trav.exit = bbox.side(&last);
-            }
-        }
-
-        let exited = trav.exit.is_some();
-        let incomplete = exited && trav.entry.is_none();
-
-        if incomplete && closed {
-            // A closed ring is reprocessed at most once per starting cell;
-            // if the coordinate list keeps growing the walk is not converging.
-            if coords.len() > 4 * n_input + 64 {
-                return Err("ring walk did not converge (vertex on cell boundary?)".into());
-            }
-            coords.extend_from_slice(trav.coords(arena));
-        }
-
-        let exit_side = trav.exit;
-        records[ci].traversals.push(trav);
-
-        if exited {
-            match exit_side {
-                Some(Side::Top) => row = row.checked_sub(1).ok_or("walker stepped above the padded grid")?,
-                Some(Side::Bottom) => row += 1,
-                Some(Side::Left) => col = col.checked_sub(1).ok_or("walker stepped left of the padded grid")?,
-                Some(Side::Right) => col += 1,
-                None => {}
-            }
-        }
+        Ok(())
     }
-
-    Ok(cells)
 }
 
 #[cfg(test)]

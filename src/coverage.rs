@@ -7,7 +7,7 @@
 //! in `ee::traversal_areas` for the common case.
 
 use crate::ee::bbox::BBox;
-use crate::ee::measures::area_signed;
+use crate::ee::measures::{area_signed, area_signed_by};
 use crate::ee::perimeter::perimeter_distance;
 use crate::geometry::Coord;
 
@@ -31,11 +31,9 @@ pub fn analytical_covered_fraction(bbox: &BBox, coords: &[Coord]) -> f64 {
     } else {
         // Entry ~= exit (degenerate): the traversal starts and ends at the
         // same point; its own path is the polygon.
-        let mut poly: Vec<Coord> = coords.to_vec();
-        if poly[0] != poly[poly.len() - 1] {
-            poly.push(poly[0]);
-        }
-        return area_signed(&poly).abs() / cell_area;
+        let m = coords.len();
+        let n = if coords[0] != coords[m - 1] { m + 1 } else { m };
+        return area_signed_by(n, |i| if i < m { coords[i] } else { coords[0] }).abs() / cell_area;
     };
 
     let h = bbox.height();
@@ -66,14 +64,20 @@ pub fn analytical_covered_fraction(bbox: &BBox, coords: &[Coord]) -> f64 {
     // for distinct corners so stability is irrelevant.
     in_arc[..n_in_arc].sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
-    let mut polygon: Vec<Coord> = Vec::with_capacity(coords.len() + n_in_arc + 1);
-    polygon.extend_from_slice(coords);
-    for c in &in_arc[..n_in_arc] {
-        polygon.push(c.0);
-    }
-    polygon.push(polygon[0]);
-
-    area_signed(&polygon).abs() / cell_area
+    // The polygon is the traversal, then the corners, then back to the
+    // start; summed in place rather than collected (one allocation per
+    // boundary cell otherwise).
+    let m = coords.len();
+    let at = |i: usize| {
+        if i < m {
+            coords[i]
+        } else if i < m + n_in_arc {
+            in_arc[i - m].0
+        } else {
+            coords[0]
+        }
+    };
+    area_signed_by(m + n_in_arc + 1, at).abs() / cell_area
 }
 
 /// Coverage fraction for a closed ring lying entirely within one cell.
