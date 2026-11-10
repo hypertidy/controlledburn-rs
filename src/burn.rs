@@ -3,14 +3,14 @@
 use std::borrow::Cow;
 
 use crate::approx::process_polygon_approx;
-use crate::coalesce::coalesce_sorted;
+use crate::coalesce::coalesce_sorted_from;
 use crate::error::BurnError;
 use crate::geometry::{Geometry, Polygon};
 use crate::grid::{Grid, GridSpec};
 use crate::line::process_line;
 use crate::output::BurnResult;
 use crate::point::process_point;
-use crate::polygon::process_polygon;
+use crate::polygon::{process_polygon, CoverageScratch};
 use crate::wkb::parse_wkb;
 
 /// How polygon boundary cells are classified.
@@ -119,13 +119,14 @@ fn process_geometry(
     geom_id: i32,
     out: &mut BurnResult,
     opts: &BurnOptions,
+    sc: &mut CoverageScratch,
 ) -> Result<(), String> {
     let run_start = out.runs.len();
     let polys = g.polygons();
     for poly in polys {
         match opts.mode {
             BurnMode::Approx => process_polygon_approx(poly, gs, geom_id, &mut out.runs),
-            BurnMode::Coverage => process_polygon(poly, full_grid, geom_id, &mut out.runs, &mut out.edges)?,
+            BurnMode::Coverage => process_polygon(poly, full_grid, geom_id, &mut out.runs, &mut out.edges, sc)?,
         }
     }
     if opts.coalesce_runs && out.runs.len() > run_start {
@@ -133,12 +134,10 @@ fn process_geometry(
         // col_start); a multipolygon's are in that order only per part, so
         // sort them together first, or a later part's run left of an
         // earlier part's on a shared row is swallowed by the merge.
-        let mut tail = out.runs.split_off(run_start);
         if polys.len() > 1 {
-            tail.sort_by_key(|r| (r.row, r.col_start));
+            out.runs[run_start..].sort_by_key(|r| (r.row, r.col_start));
         }
-        coalesce_sorted(&mut tail);
-        out.runs.extend(tail);
+        coalesce_sorted_from(&mut out.runs, run_start);
     }
     for line in g.lines() {
         process_line(line, full_grid, geom_id, &mut out.lines)?;
@@ -149,7 +148,15 @@ fn process_geometry(
     Ok(())
 }
 
-fn burn_one(g: &Geometry, k: usize, full_grid: &Grid<0>, gs: &GridSpec, out: &mut BurnResult, opts: &BurnOptions) {
+fn burn_one(
+    g: &Geometry,
+    k: usize,
+    full_grid: &Grid<0>,
+    gs: &GridSpec,
+    out: &mut BurnResult,
+    opts: &BurnOptions,
+    sc: &mut CoverageScratch,
+) {
     if g.is_empty() {
         return;
     }
@@ -158,7 +165,7 @@ fn burn_one(g: &Geometry, k: usize, full_grid: &Grid<0>, gs: &GridSpec, out: &mu
         return;
     }
     let g = normalize(g);
-    if let Err(e) = process_geometry(&g, full_grid, gs, k as i32, out, opts) {
+    if let Err(e) = process_geometry(&g, full_grid, gs, k as i32, out, opts, sc) {
         out.note(k, format!("error processing geometry: {e}"));
     }
 }
@@ -175,8 +182,9 @@ pub fn burn(geoms: &[Geometry], grid: &GridSpec, opts: impl Into<BurnOptions>) -
     let opts = opts.into();
     let full_grid = grid.bounded();
     let mut out = BurnResult::default();
+    let mut sc = CoverageScratch::default();
     for (k, g) in geoms.iter().enumerate() {
-        burn_one(g, k, &full_grid, grid, &mut out, &opts);
+        burn_one(g, k, &full_grid, grid, &mut out, &opts, &mut sc);
     }
     Ok(out)
 }
@@ -192,12 +200,13 @@ where
     let opts = opts.into();
     let full_grid = grid.bounded();
     let mut out = BurnResult::default();
+    let mut sc = CoverageScratch::default();
     for (k, blob) in wkb.into_iter().enumerate() {
         if blob.is_empty() {
             continue;
         }
         match parse_wkb(blob) {
-            Ok(g) => burn_one(&g, k, &full_grid, grid, &mut out, &opts),
+            Ok(g) => burn_one(&g, k, &full_grid, grid, &mut out, &opts, &mut sc),
             Err(e) => out.note(k, format!("failed to parse WKB: {e}")),
         }
     }

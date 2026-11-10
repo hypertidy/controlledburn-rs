@@ -13,10 +13,16 @@ use crate::output::GridRun;
 /// (id, row, col_start) with non-overlapping ranges, as the sweep emits
 /// them for a single polygon.
 pub(crate) fn coalesce_sorted(runs: &mut Vec<GridRun>) {
-    let mut w = 0usize;
-    for i in 0..runs.len() {
+    coalesce_sorted_from(runs, 0);
+}
+
+/// `coalesce_sorted` on `runs[start..]` only, in place: the runs before
+/// `start` are left alone (and never merged with).
+pub(crate) fn coalesce_sorted_from(runs: &mut Vec<GridRun>, start: usize) {
+    let mut w = start;
+    for i in start..runs.len() {
         let cur = runs[i];
-        if w > 0 {
+        if w > start {
             let last = &mut runs[w - 1];
             if last.id == cur.id && last.row == cur.row && cur.col_start <= last.col_end {
                 if cur.col_end > last.col_end {
