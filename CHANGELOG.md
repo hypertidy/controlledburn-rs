@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **`slice_tiles_par`: `slice_tiles` on several threads**, with the same
+  tiles and records in the same order (std threads only; `threads = 0` for
+  all available, which is 1 on targets without threads). Records are
+  partitioned by band of tile rows in burn order, one `u32` index per
+  record, and the bands are sliced in parallel by the serial code. On the
+  dev VM, slicing the rock outcrops at 32 m (8.4 M records) went from
+  0.12-0.20 s to 0.035-0.04 s on 16-32 threads, and small-1e5 (13.6 M
+  records) from 0.36 s to 0.05 s at 256-cell tiles. A property test checks
+  it against `slice_tiles` for random inputs, tile shapes and thread
+  counts. `Tile` now derives `PartialEq`.
 - **An external oracle, and more properties** (from burnscars, Apache-2.0;
   `fixtures/oracle/`). `tests/oracle.rs` checks burnscars' 50 cases against
   exactextract 0.3.0 and GDAL's centre rule, and requires each case's
