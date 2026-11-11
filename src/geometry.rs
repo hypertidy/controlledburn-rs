@@ -81,11 +81,12 @@ pub enum Geometry {
 }
 
 impl Geometry {
-    /// True when the geometry holds no coordinates at all.
+    /// True when the geometry holds no coordinates at all. A point with
+    /// both coordinates NaN is WKB's `POINT EMPTY`, and counts as none.
     pub fn is_empty(&self) -> bool {
         match self {
-            Geometry::Point(_) => false,
-            Geometry::MultiPoint(p) => p.is_empty(),
+            Geometry::Point(c) => is_empty_point(c),
+            Geometry::MultiPoint(p) => p.iter().all(is_empty_point),
             Geometry::LineString(l) => l.is_empty(),
             Geometry::MultiLineString(l) => l.is_empty(),
             Geometry::Polygon(p) => p.rings.is_empty(),
@@ -128,10 +129,18 @@ impl Geometry {
         pts.chain(lines).chain(polys)
     }
 
-    /// True when every coordinate is finite.
+    /// True when every coordinate is finite, empty points (both
+    /// coordinates NaN) aside.
     pub fn is_finite(&self) -> bool {
-        self.coords().all(Coord::is_finite)
+        let pts = self.points().iter().all(|c| c.is_finite() || is_empty_point(c));
+        let lines = self.lines().iter().flatten().all(Coord::is_finite);
+        pts && lines && self.polygons().iter().flat_map(|p| p.rings.iter().flatten()).all(Coord::is_finite)
     }
+}
+
+/// WKB's `POINT EMPTY`: both coordinates NaN.
+fn is_empty_point(c: &Coord) -> bool {
+    c.x.is_nan() && c.y.is_nan()
 }
 
 /// Signed area of a closed ring (shoelace). Positive = counter-clockwise

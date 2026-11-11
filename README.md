@@ -32,7 +32,9 @@ assert!((r.covered_cells() * grid.dx() * grid.dy() - 16.0).abs() < 1e-5);
 ```
 
 Indices are 0-based with row 0 at the top, run ranges are half-open,
-and geometry `k` in the input has `id = k`. WKB input (ISO and EWKB,
+and geometry `k` in the input has `id = k` (`id_offset + k` with
+`BurnOptions::with_id_offset`). A multi-part geometry has one record per
+cell: parts crossing the same cell are summed. WKB input (ISO and EWKB,
 both byte orders, Z/M skipped) goes through `burn_wkb`.
 
 ## Modes
@@ -78,8 +80,8 @@ are not a regular grid, use `crop`. It returns the same tables but scans
 the whole result on every call, so don't loop it over a tile grid.
 
 - *Parallel*: split the geometries across workers, burn each subset
-  onto the same grid, add the subset's start offset to `id`, and
-  concatenate the tables. Records are per geometry, so nothing needs
+  onto the same grid with `BurnOptions::default().with_id_offset(start)`,
+  and concatenate the tables. Records are per geometry, so nothing needs
   merging.
 - *Output too large to hold*: burn a batch of geometries, slice it into
   tiles, merge each tile into the output, drop the batch. A tile can
@@ -99,9 +101,14 @@ the whole result on every call, so don't loop it over a tile grid.
 - Unclosed polygon rings are closed by appending the first coordinate.
 - Geometries with non-finite coordinates are skipped with a note (the
   C++ walker does not terminate on a NaN vertex).
-- Adjacent runs on a row are coalesced by default;
-  `BurnOptions::parity(mode)` turns that off for record-for-record
-  equality with the C++ tables.
+- Adjacent runs on a row are coalesced by default, and a multi-part
+  geometry has one record per cell (the parts' fractions or lengths
+  summed, a sum reaching a full cell becoming a run; overlapping parts
+  are capped at a full cell, not unioned). `BurnOptions::parity(mode)`
+  turns both off for record-for-record equality with the C++ tables.
+- Rings of fewer than 4 coordinates once closed, and lines of one
+  coordinate, are skipped with a note; the C++ core skips them silently.
+  An all-NaN point (WKB `POINT EMPTY`) is empty, not non-finite.
 - Indices are 0-based, run ranges half-open and `id = k`, the same as the
   C++ core and the Python package; the R package adds 1 (1-based indices,
   inclusive `col_end`, `id = k + 1`). The golden file predates the C++
@@ -119,6 +126,15 @@ edge-case probes) in both modes. Edge fractions and line lengths are
 compared as f32 bit patterns. `tests/fixtures.rs` runs the shared
 aggregate contract from `fixtures/{geometries,expected}.csv`.
 
+## External oracle
+
+`tests/oracle.rs` checks 50 cases from burnscars against exactextract
+0.3.0 (coverage) and GDAL's rasterize (cell-centre rule), per cell at
+1e-6. Each case's set of differing cells must be exactly the expected
+one: the 5 cells where exactextract gives 0 for a full interior cell,
+and approx cells whose centre lies within about 4e-14 of an edge. The
+fixtures and their provenance are in `fixtures/oracle/`.
+
 ## Properties
 
 `tests/properties.rs` generates random simple rings on non-dyadic grids,
@@ -130,7 +146,11 @@ to the grid; the tables are well formed; the cover matrix is invariant
 under ring orientation and start vertex; it matches an exact per-cell
 clipping oracle on small grids; approx and coverage agree on full and
 empty cells; burning at 2x resolution and averaging 2x2 blocks equals
-burning at 1x. CI runs 10000 cases per property. For a longer campaign:
+burning at 1x; a ring and its complement (a box with the ring as its
+hole) sum to 1 in every cell, whatever the rings' orientations; a polygon
+with a hole conserves area and matches the clipping oracle cell by cell;
+and a multipolygon's merged output is its parts' records summed per cell.
+CI runs 10000 cases per property. For a longer campaign:
 
 ```
 PROPTEST_CASES=100000 cargo test --release --test properties

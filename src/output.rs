@@ -96,7 +96,7 @@ impl BurnResult {
         self.runs.is_empty() && self.edges.is_empty() && self.lines.is_empty() && self.points.is_empty()
     }
 
-    pub(crate) fn note(&mut self, geom_index: usize, message: impl Into<String>) {
-        self.notes.push(Note { geom_index: geom_index as i32, message: message.into() });
+    pub(crate) fn note(&mut self, id: i32, message: impl Into<String>) {
+        self.notes.push(Note { geom_index: id, message: message.into() });
     }
 }

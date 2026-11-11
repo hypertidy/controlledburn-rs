@@ -16,7 +16,8 @@
 //!
 //! Output ([`BurnResult`]), four typed tables with 0-based indices (row 0
 //! at the top) and half-open run ranges. Geometry `k` in the input slice
-//! has `id = k`:
+//! has `id = k` (plus [`BurnOptions::id_offset`]), and one record per cell,
+//! a multi-part geometry included:
 //!
 //! | table    | columns                          | meaning                                  |
 //! |----------|----------------------------------|------------------------------------------|
@@ -24,7 +25,7 @@
 //! | `edges`  | row, col, fraction (f32), id     | polygon boundary cells, fraction in (0,1)|
 //! | `lines`  | row, col, length (f32), id       | line length inside the cell, CRS units   |
 //! | `points` | row, col, id                     | one record per point inside the grid     |
-//! | `notes`  | geom_index, message              | non-fatal problems, per input geometry   |
+//! | `notes`  | geom_index (the id), message     | non-fatal problems, per input geometry   |
 //!
 //! Invariant (Coverage mode): `cell_area * (run cells + sum of edge
 //! fractions)` equals the exact polygon area inside the grid.
@@ -57,8 +58,11 @@
 //!
 //! * Unclosed polygon rings are closed by appending the first coordinate.
 //! * Geometries with non-finite coordinates are skipped with a note.
-//! * Adjacent runs are coalesced by default; `BurnOptions::parity` turns
-//!   that off for record-for-record equality with the C++ tables.
+//! * Adjacent runs are coalesced by default, and a multi-part geometry's
+//!   records are merged to one per cell; `BurnOptions::parity` turns both
+//!   off for record-for-record equality with the C++ tables.
+//! * Rings too short to burn (fewer than 4 coordinates once closed) and
+//!   one-coordinate lines are skipped with a note, not silently.
 //! * Sorts are stable, so ties among equal-x intercepts in Approx mode
 //!   are deterministic.
 //! * Indices are 0-based with half-open run ranges and `id = k`, as in the

@@ -26,7 +26,16 @@
 //!   6. burning at 2x resolution and averaging 2x2 blocks equals burning at
 //!      1x (right in total but wrong in placement is still a failure).
 //!   7. for a two-part multipolygon, coalesced runs equal the parity runs
-//!      passed through `coalesce_runs`, whatever the order of the parts.
+//!      passed through `coalesce_runs`, whatever the order of the parts
+//!      (with the merging of parts off), and with it on, the output is the
+//!      parity output summed per cell, one record per cell.
+//!   8. a ring and its complement (a box around it with the ring as its
+//!      hole) sum to 1 in every cell, under random orientations.
+//!   9. a polygon with a hole conserves area, and matches the per-cell
+//!      clipping oracle (shell less hole).
+//!
+//! Properties 8 and 9, and the hole generator, are from burnscars
+//! (Apache-2.0; see NOTICE).
 //!
 //! Run a long campaign with
 //!   PROPTEST_CASES=20000 cargo test --test properties --release
@@ -367,6 +376,58 @@ fn clipped_area(r: &[(f64, f64)], g: &G) -> f64 {
     }
 }
 
+/// Strictly inside a simple ring (even-odd ray cast; a point on an edge
+/// may go either way, which the callers' edge-touch filter makes moot).
+fn inside(r: &[(f64, f64)], p: (f64, f64)) -> bool {
+    let mut c = false;
+    for w in r.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        if (a.1 > p.1) != (b.1 > p.1) && p.0 < a.0 + (p.1 - a.1) / (b.1 - a.1) * (b.0 - a.0) {
+            c = !c;
+        }
+    }
+    c
+}
+
+/// A ring with one hole: a small star-shaped ring around the shell's
+/// vertex mean, snapped like the shell's vertices, kept when it is simple,
+/// strictly inside the shell and touches none of its edges (from
+/// burnscars' generator, tests/properties.rs).
+/// A grid, a shell and one hole.
+type Holed = (G, Vec<(f64, f64)>, Vec<(f64, f64)>);
+
+fn holed_on(g: G) -> impl Strategy<Value = Holed> {
+    let star = (0.02f64..0.25, prop::collection::vec((0.0f64..1.0, 0.3f64..1.0, snap_kind()), 3..8));
+    (ring_on(g), star)
+        .prop_map(|((g, r), (scale, vs))| {
+            let n = (r.len() - 1) as f64;
+            let cx = r[..r.len() - 1].iter().map(|p| p.0).sum::<f64>() / n;
+            let cy = r[..r.len() - 1].iter().map(|p| p.1).sum::<f64>() / n;
+            let e = g.ext();
+            let rad = scale * (e.xmax - e.xmin).min(e.ymax - e.ymin);
+            let mut h: Vec<(f64, f64)> = vs
+                .iter()
+                .enumerate()
+                .map(|(i, &(jit, k, s))| {
+                    let a = (i as f64 + jit * 0.9) / vs.len() as f64 * std::f64::consts::TAU;
+                    apply_snap(&g, cx + a.cos() * k * rad, cy + a.sin() * k * rad, s)
+                })
+                .collect();
+            h.dedup();
+            if h.first() != h.last() {
+                h.push(h[0]);
+            }
+            (g, r, h)
+        })
+        .prop_filter("simple hole strictly inside the shell", |(_, r, h)| {
+            h.len() >= 4
+                && shoelace(h).abs() > 1e-12
+                && is_simple(h)
+                && h.iter().all(|&p| inside(r, p))
+                && r.windows(2).all(|e| h.windows(2).all(|f| !seg_touch(e[0], e[1], f[0], f[1])))
+        })
+}
+
 // -------------------------------------------------------------- helpers --
 
 fn geom(r: &[(f64, f64)]) -> Geometry {
@@ -390,6 +451,12 @@ fn cover(res: &BurnResult, g: &G) -> Vec<f64> {
 
 fn burn1(r: &[(f64, f64)], g: &G, opts: BurnOptions) -> BurnResult {
     burn(&[geom(r)], &g.spec, opts).unwrap()
+}
+
+fn burn_holed(r: &[(f64, f64)], holes: &[Vec<(f64, f64)>], g: &G) -> BurnResult {
+    let ring = |r: &[(f64, f64)]| r.iter().map(|&p| Coord::from(p)).collect::<Vec<_>>();
+    let rings = std::iter::once(ring(r)).chain(holes.iter().map(|h| ring(h))).collect();
+    burn(&[Geometry::Polygon(Polygon::new(rings))], &g.spec, BurnOptions::coverage()).unwrap()
 }
 
 fn fmt_ring(r: &[(f64, f64)]) -> String {
@@ -528,12 +595,116 @@ proptest! {
             Polygon::new(vec![b.iter().map(|&p| Coord::from(p)).collect()]),
         ]);
         for mode in [BurnMode::Coverage, BurnMode::Approx] {
-            let got = burn(std::slice::from_ref(&mp), &g.spec, BurnOptions::default().with_mode(mode)).unwrap();
+            let opts = BurnOptions::default().with_mode(mode).with_merge_parts(false);
+            let got = burn(std::slice::from_ref(&mp), &g.spec, opts).unwrap();
             let par = burn(std::slice::from_ref(&mp), &g.spec, BurnOptions::parity(mode)).unwrap();
             let mut want = par.runs.clone();
             coalesce_runs(&mut want);
             prop_assert_eq!(&got.runs, &want, "{:?} runs\n{}\n{}\n{}", mode, fmt_grid(&g), fmt_ring(&a), fmt_ring(&b));
             prop_assert_eq!(&got.edges, &par.edges, "{:?} edges", mode);
         }
+    }
+
+    /// The default output of a multipolygon is the parity output summed per
+    /// cell: a cell that a part covers fully is a run; otherwise the parts'
+    /// fractions summed in part order (f32, bit for bit) make an edge, or a
+    /// run once they reach 1 - 1e-6. One record per cell.
+    #[test]
+    fn multipolygon_parts_merge_per_cell(((g, a), (_, b)) in grid().prop_flat_map(|g| (ring_on(g.clone()), ring_on(g)))) {
+        use std::collections::BTreeMap;
+        let mp = Geometry::MultiPolygon(vec![
+            Polygon::new(vec![a.iter().map(|&p| Coord::from(p)).collect()]),
+            Polygon::new(vec![b.iter().map(|&p| Coord::from(p)).collect()]),
+        ]);
+        for mode in [BurnMode::Coverage, BurnMode::Approx] {
+            let got = burn(std::slice::from_ref(&mp), &g.spec, BurnOptions::default().with_mode(mode)).unwrap();
+            let par = burn(std::slice::from_ref(&mp), &g.spec, BurnOptions::parity(mode)).unwrap();
+            // expected: Some(f) an edge, None a full cell
+            let mut want: BTreeMap<(i32, i32), Option<f32>> = BTreeMap::new();
+            for r in &par.runs {
+                for c in r.col_start..r.col_end {
+                    want.insert((r.row, c), None);
+                }
+            }
+            for e in &par.edges {
+                if let Some(v) = want.entry((e.row, e.col)).or_insert(Some(0.0)) {
+                    *v += e.fraction;
+                }
+            }
+            for v in want.values_mut() {
+                if matches!(v, Some(f) if *f >= 1.0 - 1e-6) {
+                    *v = None;
+                }
+            }
+            let mut have: BTreeMap<(i32, i32), Option<f32>> = BTreeMap::new();
+            for r in &got.runs {
+                for c in r.col_start..r.col_end {
+                    prop_assert!(have.insert((r.row, c), None).is_none(), "{:?}: two records in ({}, {})", mode, r.row, c);
+                }
+            }
+            for e in &got.edges {
+                prop_assert!(have.insert((e.row, e.col), Some(e.fraction)).is_none(), "{:?}: two records in ({}, {})", mode, e.row, e.col);
+            }
+            prop_assert_eq!(&have, &want, "{:?}\n{}\n{}\n{}", mode, fmt_grid(&g), fmt_ring(&a), fmt_ring(&b));
+            // runs coalesced: none touches the next on its row
+            prop_assert!(got.runs.windows(2).all(|w| w[0].row != w[1].row || w[0].col_end < w[1].col_start));
+        }
+    }
+
+    /// A ring and its complement (a box around the ring and the grid, with
+    /// the ring as its hole) add up to 1 in every cell. Each of the three
+    /// rings (the ring, the box, the ring as a hole) has a random
+    /// orientation: the fill must not depend on it. (From burnscars.)
+    #[test]
+    fn ring_and_complement_sum_to_one((g, r) in ring(), flip in any::<[bool; 3]>()) {
+        let e = g.ext();
+        let (w, h) = (e.xmax - e.xmin, e.ymax - e.ymin);
+        let lo_x = r.iter().map(|p| p.0).fold(e.xmin, f64::min) - w;
+        let hi_x = r.iter().map(|p| p.0).fold(e.xmax, f64::max) + w;
+        let lo_y = r.iter().map(|p| p.1).fold(e.ymin, f64::min) - h;
+        let hi_y = r.iter().map(|p| p.1).fold(e.ymax, f64::max) + h;
+        let bx = vec![(lo_x, lo_y), (hi_x, lo_y), (hi_x, hi_y), (lo_x, hi_y), (lo_x, lo_y)];
+        let orient = |v: &[(f64, f64)], rev: bool| -> Vec<(f64, f64)> {
+            if rev { v.iter().rev().copied().collect() } else { v.to_vec() }
+        };
+        let (ring, shell, hole) = (orient(&r, flip[0]), orient(&bx, flip[1]), orient(&r, flip[2]));
+        let a = cover(&burn1(&ring, &g, BurnOptions::coverage()), &g);
+        let b = cover(&burn_holed(&shell, std::slice::from_ref(&hole), &g), &g);
+        for (i, (x, y)) in a.iter().zip(&b).enumerate() {
+            prop_assert!((x + y - 1.0).abs() <= 2e-6,
+                "cell {i}: ring {x} + complement {y} != 1 (flip {flip:?})\n{}\n{}", fmt_grid(&g), fmt_ring(&r));
+        }
+    }
+
+    #[test]
+    fn hole_conserves_area((g, r, h) in grid().prop_flat_map(holed_on)) {
+        let res = burn_holed(&r, std::slice::from_ref(&h), &g);
+        let (got, truth) = (area(&res, &g.spec), clipped_area(&r, &g) - clipped_area(&h, &g));
+        let cell = g.res() * g.res();
+        let tol = 1e-6 * truth.max(cell) + res.edges.len() as f64 * cell * 2e-7;
+        prop_assert!((got - truth).abs() <= tol,
+            "area {got} vs {truth}\n{}\n{}\nhole {}", fmt_grid(&g), fmt_ring(&r), fmt_ring(&h));
+    }
+
+    /// Every cell of a polygon with a hole against Sutherland-Hodgman
+    /// clipping of the shell less the hole. (From burnscars.)
+    #[test]
+    fn hole_matches_exact_per_cell_oracle((g, r, h) in grid_up_to(16).prop_flat_map(holed_on)) {
+        let m = cover(&burn_holed(&r, std::slice::from_ref(&h), &g), &g);
+        let (nc, nr) = (g.ncol(), g.nrow());
+        let e = g.ext();
+        let res = g.res();
+        let clipped = |ring: &[(f64, f64)], cell: &Ext| {
+            let c = clip_to(ring, cell);
+            if c.len() < 4 { 0.0 } else { shoelace(&c).abs() }
+        };
+        for row in 0..nr { for col in 0..nc {
+            let cell = Ext { xmin: e.xmin + col as f64 * res, xmax: e.xmin + (col + 1) as f64 * res,
+                             ymax: e.ymax - row as f64 * res, ymin: e.ymax - (row + 1) as f64 * res };
+            let truth = (clipped(&r, &cell) - clipped(&h, &cell)) / (res * res);
+            let got = m[row * nc + col];
+            prop_assert!((got - truth).abs() <= 2e-6,
+                "row {row} col {col}: burned {got} vs clipped {truth}\n{}\n{}\nhole {}", fmt_grid(&g), fmt_ring(&r), fmt_ring(&h));
+        } }
     }
 }
