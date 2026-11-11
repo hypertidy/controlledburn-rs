@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **An external oracle, and more properties** (from burnscars, Apache-2.0;
+  `fixtures/oracle/`). `tests/oracle.rs` checks burnscars' 50 cases against
+  exactextract 0.3.0 and GDAL's centre rule, and requires each case's
+  differing cells to be exactly the expected set: the 5 coverage cells
+  where exactextract 0.3.0 gives 0 for a full interior cell, and the
+  centre-on-edge ties burnscars lists, less 9 where cb agrees with GDAL.
+  New properties: a ring and its complement sum to 1 in every cell under
+  any orientations; a polygon with a hole conserves area and matches the
+  per-cell clipping oracle.
 - **One record per cell for multi-part geometries** (`BurnOptions::merge_parts`,
   on by default). The parts of a multipolygon were burned one by one, so
   a cell two parts cross had two edges: two halves either side of a shared

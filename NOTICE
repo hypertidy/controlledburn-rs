@@ -12,6 +12,12 @@ logic, perimeter-distance parameterisation, area measures, grid
 indexing (shrink-to-fit and cell boxes, in src/grid.rs) and the
 left-hand-area chain chasing algorithm.
 
+The files in fixtures/oracle/ (oracle cases and per-cell results from
+exactextract and GDAL, their known differences, and the generator) and
+the hole and complement property tests in tests/properties.rs are taken
+from burnscars (https://github.com/earth-mover/burnscars), Copyright 2026
+The burnscars authors, Apache License 2.0.
+
 The approx-mode scanline (src/approx.rs) and the pixel reduction
 functions in src/materialize.rs derive, through the C++ core, from the
 fasterize R package (https://github.com/ecohealthalliance/fasterize),

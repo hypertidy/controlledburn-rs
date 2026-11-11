@@ -126,6 +126,15 @@ edge-case probes) in both modes. Edge fractions and line lengths are
 compared as f32 bit patterns. `tests/fixtures.rs` runs the shared
 aggregate contract from `fixtures/{geometries,expected}.csv`.
 
+## External oracle
+
+`tests/oracle.rs` checks 50 cases from burnscars against exactextract
+0.3.0 (coverage) and GDAL's rasterize (cell-centre rule), per cell at
+1e-6. Each case's set of differing cells must be exactly the expected
+one: the 5 cells where exactextract gives 0 for a full interior cell,
+and approx cells whose centre lies within about 4e-14 of an edge. The
+fixtures and their provenance are in `fixtures/oracle/`.
+
 ## Properties
 
 `tests/properties.rs` generates random simple rings on non-dyadic grids,
@@ -137,7 +146,11 @@ to the grid; the tables are well formed; the cover matrix is invariant
 under ring orientation and start vertex; it matches an exact per-cell
 clipping oracle on small grids; approx and coverage agree on full and
 empty cells; burning at 2x resolution and averaging 2x2 blocks equals
-burning at 1x. CI runs 10000 cases per property. For a longer campaign:
+burning at 1x; a ring and its complement (a box with the ring as its
+hole) sum to 1 in every cell, whatever the rings' orientations; a polygon
+with a hole conserves area and matches the clipping oracle cell by cell;
+and a multipolygon's merged output is its parts' records summed per cell.
+CI runs 10000 cases per property. For a longer campaign:
 
 ```
 PROPTEST_CASES=100000 cargo test --release --test properties

@@ -1,0 +1,115 @@
+# Known differences. See docs/superpowers/specs/2026-10-14-burnscars-core-design.org (Oracle).
+# Each entry lists the exact set of differing cells as [row, col]. The case passes only if
+# its difference set is this set.
+
+# Coverage: exactextract 0.3.0 interior-cell bug (spec: Risks, "Oracle differences").
+
+[[diff]]
+table = "coverage"
+case = "random_1"
+cells = [[30, 8]]
+reason = "exactextract interior-cell bug: exactextract 0.3.0 gives 0 for these full interior cells when vertices are on or a few ulp off the lattice. The GEOS area of each cell is 1 and burnscars gives 1; the area self-check in oracle/generate.py fails by the same amount (spec: Risks, Oracle differences)."
+
+[[diff]]
+table = "coverage"
+case = "random_4"
+cells = [[6, 6], [7, 7]]
+reason = "exactextract interior-cell bug: exactextract 0.3.0 gives 0 for these full interior cells when vertices are on or a few ulp off the lattice. The GEOS area of each cell is 1 and burnscars gives 1; the area self-check in oracle/generate.py fails by the same amount (spec: Risks, Oracle differences)."
+
+[[diff]]
+table = "coverage"
+case = "random_28"
+cells = [[6, 27]]
+reason = "exactextract interior-cell bug: exactextract 0.3.0 gives 0 for these full interior cells when vertices are on or a few ulp off the lattice. The GEOS area of each cell is 1 and burnscars gives 1; the area self-check in oracle/generate.py fails by the same amount (spec: Risks, Oracle differences)."
+
+[[diff]]
+table = "coverage"
+case = "random_39"
+cells = [[36, 18]]
+reason = "exactextract interior-cell bug: exactextract 0.3.0 gives 0 for these full interior cells when vertices are on or a few ulp off the lattice. The GEOS area of each cell is 1 and burnscars gives 1; the area self-check in oracle/generate.py fails by the same amount (spec: Risks, Oracle differences)."
+
+# Approx: centre-on-edge ties against GDAL intercept rounding (spec: Approx path, Oracle).
+
+[[diff]]
+table = "approx"
+case = "offset_rect"
+cells = [[1, 2], [1, 6], [2, 2], [2, 6], [3, 2], [3, 6], [4, 2], [4, 6], [5, 3], [5, 4], [5, 5], [5, 6]]
+reason = "Centre-on-edge tie vs GDAL intercept rounding: the edges x = 2.5 and x = 6.5 and the bottom edge y = 4.5 go through cell centres (each listed centre is within 4e-14 of a cell of an edge). GDAL rounds intercepts to integer pixels, floor(x + 0.5), so it takes a centre on a right edge, and it fills bottom horizontal edges on the centre line. burnscars is left-inclusive (x <= x_mid) and half-open in y (spec: Approx path)."
+
+[[diff]]
+table = "approx"
+case = "straddle"
+cells = [[3, 4], [4, 4], [5, 4], [6, 4], [7, 0], [7, 1], [7, 2], [7, 3], [7, 4]]
+reason = "Centre-on-edge tie vs GDAL intercept rounding: the right edge x = 4.5 and the bottom edge y = 2.5 go through cell centres (each listed centre is within 4e-14 of a cell of an edge). GDAL rounds intercepts to integer pixels, floor(x + 0.5), so it takes a centre on a right edge, and it fills bottom horizontal edges on the centre line. burnscars is left-inclusive (x <= x_mid) and half-open in y (spec: Approx path)."
+
+[[diff]]
+table = "approx"
+case = "grid_node"
+cells = [[5, 4], [5, 5], [6, 3], [6, 6], [7, 2], [7, 7]]
+reason = "Centre-on-edge tie vs GDAL intercept rounding: the edges x = y and x + y = 10 go through cell centres (each listed centre is within 4e-14 of a cell of an edge). GDAL rounds intercepts to integer pixels, floor(x + 0.5), so it takes a centre on a right edge, and it fills bottom horizontal edges on the centre line. burnscars is left-inclusive (x <= x_mid) and half-open in y (spec: Approx path)."
+
+[[diff]]
+table = "approx"
+case = "falklands_200"
+cells = [[167, 48], [181, 34]]
+reason = "Centre-on-edge tie vs GDAL intercept rounding: two edges cross a row centre line at a cell centre (x = 2.425 and x = 1.725) (each listed centre is within 4e-14 of a cell of an edge). GDAL rounds intercepts to integer pixels, floor(x + 0.5), so it takes a centre on a right edge, and it fills bottom horizontal edges on the centre line. burnscars is left-inclusive (x <= x_mid) and half-open in y (spec: Approx path)."
+
+[[diff]]
+table = "approx"
+case = "random_0"
+cells = [[5, 2], [9, 4], [14, 19], [19, 18]]
+reason = "Centre-on-edge tie vs GDAL intercept rounding: vertices on the lattice put edge intercepts on cell centres (each listed centre is within 4e-14 of a cell of an edge). GDAL rounds intercepts to integer pixels, floor(x + 0.5), so it takes a centre on a right edge, and it fills bottom horizontal edges on the centre line. burnscars is left-inclusive (x <= x_mid) and half-open in y (spec: Approx path)."
+
+[[diff]]
+table = "approx"
+case = "random_3"
+cells = [[8, 11], [9, 12], [10, 13], [11, 14], [14, 11], [19, 14]]
+reason = "Centre-on-edge tie vs GDAL intercept rounding: vertices on the lattice put edge intercepts on cell centres (each listed centre is within 4e-14 of a cell of an edge). GDAL rounds intercepts to integer pixels, floor(x + 0.5), so it takes a centre on a right edge, and it fills bottom horizontal edges on the centre line. burnscars is left-inclusive (x <= x_mid) and half-open in y (spec: Approx path)."
+
+[[diff]]
+table = "approx"
+case = "random_9"
+cells = [[7, 17], [8, 5], [9, 8], [11, 9], [11, 22]]
+reason = "Centre-on-edge tie vs GDAL intercept rounding: vertices on the lattice put edge intercepts on cell centres (each listed centre is within 4e-14 of a cell of an edge). GDAL rounds intercepts to integer pixels, floor(x + 0.5), so it takes a centre on a right edge, and it fills bottom horizontal edges on the centre line. burnscars is left-inclusive (x <= x_mid) and half-open in y (spec: Approx path)."
+
+[[diff]]
+table = "approx"
+case = "random_12"
+cells = [[22, 44], [30, 51]]
+reason = "Centre-on-edge tie vs GDAL intercept rounding: vertices on the lattice put edge intercepts on cell centres (each listed centre is within 4e-14 of a cell of an edge). GDAL rounds intercepts to integer pixels, floor(x + 0.5), so it takes a centre on a right edge, and it fills bottom horizontal edges on the centre line. burnscars is left-inclusive (x <= x_mid) and half-open in y (spec: Approx path)."
+
+[[diff]]
+table = "approx"
+case = "random_24"
+cells = [[12, 19], [13, 20], [18, 35], [19, 34], [20, 34], [21, 14], [21, 35]]
+reason = "Centre-on-edge tie vs GDAL intercept rounding: vertices on the lattice put edge intercepts on cell centres (each listed centre is within 4e-14 of a cell of an edge). GDAL rounds intercepts to integer pixels, floor(x + 0.5), so it takes a centre on a right edge, and it fills bottom horizontal edges on the centre line. burnscars is left-inclusive (x <= x_mid) and half-open in y (spec: Approx path)."
+
+[[diff]]
+table = "approx"
+case = "random_27"
+cells = [[3, 2], [5, 5]]
+reason = "Centre-on-edge tie vs GDAL intercept rounding: vertices on the lattice put edge intercepts on cell centres (each listed centre is within 4e-14 of a cell of an edge). GDAL rounds intercepts to integer pixels, floor(x + 0.5), so it takes a centre on a right edge, and it fills bottom horizontal edges on the centre line. burnscars is left-inclusive (x <= x_mid) and half-open in y (spec: Approx path)."
+
+[[diff]]
+table = "approx"
+case = "random_30"
+cells = [[22, 5], [34, 6], [50, 4]]
+reason = "Centre-on-edge tie vs GDAL intercept rounding: vertices on the lattice put edge intercepts on cell centres (each listed centre is within 4e-14 of a cell of an edge). GDAL rounds intercepts to integer pixels, floor(x + 0.5), so it takes a centre on a right edge, and it fills bottom horizontal edges on the centre line. burnscars is left-inclusive (x <= x_mid) and half-open in y (spec: Approx path)."
+
+[[diff]]
+table = "approx"
+case = "random_33"
+cells = [[25, 15]]
+reason = "Centre-on-edge tie vs GDAL intercept rounding: vertices on the lattice put edge intercepts on cell centres (each listed centre is within 4e-14 of a cell of an edge). GDAL rounds intercepts to integer pixels, floor(x + 0.5), so it takes a centre on a right edge, and it fills bottom horizontal edges on the centre line. burnscars is left-inclusive (x <= x_mid) and half-open in y (spec: Approx path)."
+
+[[diff]]
+table = "approx"
+case = "random_36"
+cells = [[21, 10], [22, 6]]
+reason = "Centre-on-edge tie vs GDAL intercept rounding: vertices on the lattice put edge intercepts on cell centres (each listed centre is within 4e-14 of a cell of an edge). GDAL rounds intercepts to integer pixels, floor(x + 0.5), so it takes a centre on a right edge, and it fills bottom horizontal edges on the centre line. burnscars is left-inclusive (x <= x_mid) and half-open in y (spec: Approx path)."
+
+[[diff]]
+table = "approx"
+case = "random_39"
+cells = [[25, 22], [31, 23], [32, 10], [33, 11], [33, 25], [37, 15], [38, 26], [41, 21], [43, 15], [43, 27], [46, 22]]
+reason = "Centre-on-edge tie vs GDAL intercept rounding: vertices on the lattice put edge intercepts on cell centres (each listed centre is within 4e-14 of a cell of an edge). GDAL rounds intercepts to integer pixels, floor(x + 0.5), so it takes a centre on a right edge, and it fills bottom horizontal edges on the centre line. burnscars is left-inclusive (x <= x_mid) and half-open in y (spec: Approx path)."
