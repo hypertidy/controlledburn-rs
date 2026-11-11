@@ -97,7 +97,10 @@ What a front end must do:
    and change no cell.
 4. **Handle wrap and folds** (periodic longitude, tripolar seams) by
    unwrapping into a wider index space and folding columns back after,
-   not by splitting the polygon in the engine.
+   not by splitting the polygon in the engine. Two pieces of one
+   geometry can then land in the same cell: `merge_cells` after the fold
+   gives one record per cell and id again, by the rule `burn` uses for
+   multi-part geometries.
 5. **Weight back to world units** if it wants areas: a fraction times
    the cell's world area. That is exact only when the map preserves area
    ratios within each cell (affine, rectilinear, equal-area cells).
