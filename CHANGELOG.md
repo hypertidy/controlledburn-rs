@@ -11,7 +11,12 @@
   0.12-0.20 s to 0.035-0.04 s on 16-32 threads, and small-1e5 (13.6 M
   records) from 0.36 s to 0.05 s at 256-cell tiles. A property test checks
   it against `slice_tiles` for random inputs, tile shapes and thread
-  counts. `Tile` now derives `PartialEq`.
+  counts. `Tile` now derives `PartialEq`. It uses at most one thread per
+  131,072 records (serial below 262,144): on Setonix, starting 128
+  threads cost about 15 ms, so small outputs sliced up to 30x slower than
+  serially. On the dev VM at 32 threads the cap makes those 2-10x faster
+  (rock outcrops at 1024 m: 5.9 ms to 0.56 ms) and outputs of 0.2-2 M
+  records 1.3-1.6x faster, with large outputs unchanged.
 - **An external oracle, and more properties** (from burnscars, Apache-2.0;
   `fixtures/oracle/`). `tests/oracle.rs` checks burnscars' 50 cases against
   exactextract 0.3.0 and GDAL's centre rule, and requires each case's

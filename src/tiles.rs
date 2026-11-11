@@ -80,9 +80,12 @@ pub fn slice_tiles(result: &BurnResult, grid: &GridSpec, tile_ncol: u32, tile_nr
     s.slice(result, 0..s.ntr, None)
 }
 
-/// Below this many records `slice_tiles_par` slices on the calling thread:
-/// starting threads costs more than the slice.
-const PAR_MIN_RECORDS: usize = 1 << 15;
+/// `slice_tiles_par` uses at most one thread per this many records, and
+/// slices on the calling thread below two: a thread costs about 0.1 ms to
+/// start, so on a small output more threads make the slice slower. On a
+/// 128-core node, 0.4 M records sliced fastest on about 8 threads, 2 M on
+/// 8-32 and 8.5 M on 32-64; this cap gives 3, 15 and 64.
+const RECORDS_PER_THREAD: usize = 1 << 17;
 
 /// Bands of tile rows per thread: enough that one dense band does not
 /// leave the other threads idle.
@@ -97,8 +100,9 @@ const BANDS_PER_THREAD: usize = 8;
 /// then the bands are sliced in parallel, each into tile rows no other
 /// band touches. The extra memory is one `u32` per record.
 ///
-/// With one thread, a single tile row, or fewer than about 32,000 records
-/// it runs [`slice_tiles`] on the calling thread. Threads come from
+/// It uses at most one thread per 131,072 (2^17) records, so `threads` is
+/// an upper bound. With one thread, a single tile row, or fewer than
+/// 262,144 records it runs [`slice_tiles`] on the calling thread. Threads come from
 /// `std::thread::scope`; on a target without threads (such as
 /// `wasm32-unknown-unknown`) pass `threads = 1`, or use [`slice_tiles`].
 ///
@@ -112,24 +116,30 @@ pub fn slice_tiles_par(
     tile_nrow: u32,
     threads: usize,
 ) -> Vec<Tile> {
-    slice_tiles_par_from(result, grid, tile_ncol, tile_nrow, threads, PAR_MIN_RECORDS)
+    slice_tiles_par_from(result, grid, tile_ncol, tile_nrow, threads, RECORDS_PER_THREAD)
 }
 
-/// `slice_tiles_par`, going parallel from `min_records` records (the
-/// tests force the parallel path on small inputs).
+/// Threads for `total` records: at most one per `per_thread` (0: no cap).
+fn capped(threads: usize, total: usize, per_thread: usize) -> usize {
+    total.checked_div(per_thread).map_or(threads, |n| threads.min(n))
+}
+
+/// `slice_tiles_par` with one thread per `per_thread` records at most;
+/// 0 means no cap (the tests force the parallel path on small inputs).
 fn slice_tiles_par_from(
     result: &BurnResult,
     grid: &GridSpec,
     tile_ncol: u32,
     tile_nrow: u32,
     threads: usize,
-    min_records: usize,
+    per_thread: usize,
 ) -> Vec<Tile> {
     let s = Shape::new(grid, tile_ncol, tile_nrow);
     let threads = if threads == 0 { std::thread::available_parallelism().map_or(1, |n| n.get()) } else { threads };
     let lens = [result.runs.len(), result.edges.len(), result.lines.len(), result.points.len()];
     let total: usize = lens.iter().sum();
-    if threads < 2 || s.ntr < 2 || total < min_records || lens.iter().any(|&n| n > u32::MAX as usize) {
+    let threads = capped(threads, total, per_thread);
+    if threads < 2 || s.ntr < 2 || lens.iter().any(|&n| n > u32::MAX as usize) {
         return s.slice(result, 0..s.ntr, None);
     }
 
@@ -420,6 +430,16 @@ mod tests {
         r.edges.push(GridEdge { row: 1, col: 1, fraction: 0.5, id: 0 });
         r.edges.push(GridEdge { row: 9, col: 1, fraction: 0.5, id: 0 });
         slice_tiles_par_from(&r, &grid, 2, 2, 4, 0);
+    }
+
+    #[test]
+    fn threads_are_capped_by_records() {
+        let p = RECORDS_PER_THREAD;
+        assert_eq!(capped(128, 2 * p - 1, p), 1); // serial below two threads' worth
+        assert_eq!(capped(128, 2 * p, p), 2);
+        assert_eq!(capped(128, 32 * p + 5, p), 32);
+        assert_eq!(capped(8, 1000 * p, p), 8); // never more than asked for
+        assert_eq!(capped(8, 0, 0), 8); // no cap
     }
 
     #[test]

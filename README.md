@@ -78,8 +78,11 @@ The tiles put back together are bit-identical to materializing the
 whole grid (`tests/tiles.rs`). `slice_tiles_par(&r, &grid, 256, 256,
 threads)` gives the same tiles using several threads (std only, no extra
 dependencies). On 8.4 M records it was 2-5x faster than `slice_tiles`
-at 8-32 threads. Its parallelism is by band of tile rows, so a grid only
-a few tiles tall gains little, and on 2 threads it is about even. For a single window, or tile extents that
+at 8-32 threads. It uses at most one thread per 131,072 records, so a
+small output is sliced on the calling thread, where starting threads would
+cost more than they save. Its parallelism is by band of tile rows, so a
+grid only a few tiles tall gains little, and on 2 threads it is about
+even. For a single window, or tile extents that
 are not a regular grid, use `crop`. It returns the same tables but scans
 the whole result on every call, so don't loop it over a tile grid.
 
