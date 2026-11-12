@@ -95,10 +95,22 @@ the whole result on every call, so don't loop it over a tile grid.
   meet it, on its own worker. Cheap for geometries small next to the
   tile; a geometry much larger than the tile is walked whole for each
   tile it meets, so burn those once and slice (`design/tile-parallel.md`).
-- *Parallel*: split the geometries across workers, burn each subset
-  onto the same grid with `BurnOptions::default().with_id_offset(start)`,
-  and concatenate the tables. Records are per geometry, so nothing needs
-  merging.
+- *Parallel*: `burn_par(&geoms, &grid, opts, threads)` gives `burn`'s
+  result, record for record, using several threads (std only): chunks of
+  geometries balanced by coordinates and rows spanned, costliest first,
+  then the tables put together in order. On the dev VM at 32 threads it
+  burned rock-32m (26 k polygons, 8.4 M records) in coverage mode in
+  0.074 s with glibc's huge pages and 0.14 s without (1.16 s serial),
+  0.66-0.79x the time of a rayon split that concatenates naively. One geometry is
+  never split, so one huge polygon gains nothing, and the threads are
+  started on each call (about 2 ms for 32), so a burn of a few
+  milliseconds is faster on a warm pool of your own: split the
+  geometries, burn each subset onto the same grid with
+  `BurnOptions::default().with_id_offset(start)`, and concatenate the
+  tables. Records are per geometry, so nothing needs merging. The
+  concatenation is serial, and on 4 KB pages it is first-touch bound:
+  about half the time of a 32-thread coverage burn of 8-14 M records, a third
+  of that with transparent huge pages.
 - *Output too large to hold*: burn a batch of geometries, slice it into
   tiles, merge each tile into the output, drop the batch. A tile can
   hold records from more than one batch, so merge rather than overwrite.

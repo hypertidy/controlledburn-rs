@@ -7,7 +7,7 @@ use crate::approx::process_polygon_approx;
 use crate::coalesce::coalesce_sorted_from;
 use crate::ee::bbox::BBox;
 use crate::error::BurnError;
-use crate::geometry::{Geometry, Polygon};
+use crate::geometry::{Coord, Geometry, Polygon};
 use crate::grid::{Grid, GridSpec};
 use crate::line::process_line;
 use crate::output::{BurnResult, GridRun};
@@ -481,6 +481,170 @@ where
     Ok(out)
 }
 
+/// `burn_par` uses at most one thread per this much work (a geometry's
+/// work being its coordinates plus the grid rows it spans), and burns on
+/// the calling thread below two.
+const WORK_PER_THREAD: usize = 1 << 13;
+
+/// Chunks of geometries per thread: enough that a costly chunk taken last
+/// does not leave the other threads idle for long.
+const CHUNKS_PER_THREAD: usize = 16;
+
+/// [`burn`] on `threads` threads (0: all available). The result is the
+/// same as `burn`'s, record for record and in the same order, notes
+/// included.
+///
+/// The geometries are split into contiguous chunks of about equal work
+/// (coordinates plus the grid rows each geometry spans), several per
+/// thread. Each thread takes the costliest
+/// chunk left, burns it into its own tables with its own scratch buffers,
+/// and takes the next; the chunks' tables are then put together in
+/// geometry order. The extra memory is the chunks' tables, which are freed
+/// as they are copied.
+///
+/// One geometry is never split, so a collection dominated by one large
+/// geometry gets little speedup: burn that once, or burn tiles of it with
+/// [`burn_window`].
+///
+/// It uses at most one thread per 8,192 (2^13) of that work, so `threads`
+/// is an upper bound; with one thread or one geometry it runs [`burn`] on
+/// the calling thread. Threads come from `std::thread::scope`; on a target
+/// without threads (such as `wasm32-unknown-unknown`) pass `threads = 1`,
+/// or use [`burn`].
+///
+/// # Examples
+///
+/// ```
+/// use controlledburn::{burn, burn_par, BurnOptions, Coord, Geometry,
+///     GridSpec, Polygon};
+///
+/// let squares: Vec<Geometry> = (0..20)
+///     .map(|i| {
+///         let (x, y) = ((i % 5) as f64 * 2.0 + 0.3, (i / 5) as f64 * 2.0 + 0.3);
+///         Geometry::Polygon(Polygon::new(vec![vec![
+///             Coord::new(x, y), Coord::new(x + 1.4, y), Coord::new(x + 1.4, y + 1.4),
+///             Coord::new(x, y + 1.4), Coord::new(x, y),
+///         ]]))
+///     })
+///     .collect();
+/// let grid = GridSpec::new(0.0, 0.0, 10.0, 8.0, 20, 16);
+/// let par = burn_par(&squares, &grid, BurnOptions::default(), 4).unwrap();
+/// assert_eq!(par, burn(&squares, &grid, BurnOptions::default()).unwrap());
+/// ```
+pub fn burn_par(
+    geoms: &[Geometry],
+    grid: &GridSpec,
+    opts: impl Into<BurnOptions>,
+    threads: usize,
+) -> Result<BurnResult, BurnError> {
+    burn_par_from(geoms, grid, opts.into(), threads, WORK_PER_THREAD)
+}
+
+/// `burn_par` with one thread per `per_thread` of work at most; 0
+/// means no cap (the tests force the parallel path on small inputs).
+fn burn_par_from(
+    geoms: &[Geometry],
+    grid: &GridSpec,
+    opts: BurnOptions,
+    threads: usize,
+    per_thread: usize,
+) -> Result<BurnResult, BurnError> {
+    let threads = if threads == 0 { std::thread::available_parallelism().map_or(1, |n| n.get()) } else { threads };
+    let cost: Vec<usize> = geoms.iter().map(|g| work(g, grid)).collect();
+    let total: usize = cost.iter().sum();
+    let threads = total.checked_div(per_thread).map_or(threads, |n| threads.min(n));
+    if threads < 2 || geoms.len() < 2 {
+        return burn(geoms, grid, opts);
+    }
+    grid.validate()?;
+    opts.validate()?;
+    opts.id(geoms.len() - 1)?;
+
+    // Contiguous chunks of about equal work.
+    let target = (total + threads * CHUNKS_PER_THREAD - 1) / (threads * CHUNKS_PER_THREAD);
+    let mut chunks: Vec<Range<usize>> = Vec::new();
+    let (mut start, mut acc) = (0, 0);
+    for (k, &c) in cost.iter().enumerate() {
+        acc += c;
+        if acc >= target {
+            chunks.push(start..k + 1);
+            (start, acc) = (k + 1, 0);
+        }
+    }
+    if start < geoms.len() {
+        chunks.push(start..geoms.len());
+    }
+    // Costliest first, so the last chunks taken are small.
+    let chunk_cost = |r: &Range<usize>| cost[r.clone()].iter().sum::<usize>();
+    let mut order: Vec<usize> = (0..chunks.len()).collect();
+    order.sort_by_key(|&i| std::cmp::Reverse(chunk_cost(&chunks[i])));
+
+    let full_grid = grid.bounded();
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let (chunks, order, next, full_grid, opts) = (&chunks, &order, &next, &full_grid, &opts);
+    let mut parts: Vec<(usize, BurnResult)> = std::thread::scope(|sc| {
+        let hs: Vec<_> = (0..threads.min(chunks.len()))
+            .map(|_| {
+                sc.spawn(move || {
+                    let mut mine = Vec::new();
+                    let mut sc = CoverageScratch::default();
+                    loop {
+                        let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some(&c) = order.get(i) else { break };
+                        let mut out = BurnResult::default();
+                        for k in chunks[c].clone() {
+                            // ids were checked above
+                            let id = opts.id(k).expect("id checked");
+                            burn_one(&geoms[k], id, full_grid, grid, &mut out, opts, &mut sc, None);
+                        }
+                        mine.push((c, out));
+                    }
+                    mine
+                })
+            })
+            .collect();
+        hs.into_iter().flat_map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).collect()
+    });
+    parts.sort_unstable_by_key(|p| p.0);
+
+    let mut out = BurnResult::default();
+    out.runs.reserve_exact(parts.iter().map(|p| p.1.runs.len()).sum());
+    out.edges.reserve_exact(parts.iter().map(|p| p.1.edges.len()).sum());
+    out.lines.reserve_exact(parts.iter().map(|p| p.1.lines.len()).sum());
+    out.points.reserve_exact(parts.iter().map(|p| p.1.points.len()).sum());
+    for (_, p) in parts {
+        out.runs.extend_from_slice(&p.runs);
+        out.edges.extend_from_slice(&p.edges);
+        out.lines.extend_from_slice(&p.lines);
+        out.points.extend_from_slice(&p.points);
+        out.notes.extend(p.notes);
+    }
+    Ok(out)
+}
+
+/// A geometry's estimated burn cost: one, plus its coordinates (the
+/// walk), plus the grid rows its extent spans (the sweep and the output).
+/// The extent is taken from at most 16 coordinates of each part, so the
+/// estimate costs O(parts), not O(coordinates).
+fn work(g: &Geometry, grid: &GridSpec) -> usize {
+    let (mut n, mut lo, mut hi) = (0usize, f64::INFINITY, f64::NEG_INFINITY);
+    let mut part = |c: &[Coord]| {
+        n += c.len();
+        let step = (c.len() + 15) / 16 + usize::from(c.is_empty());
+        for p in c.iter().step_by(step).chain(c.last()) {
+            lo = lo.min(p.y);
+            hi = hi.max(p.y);
+        }
+    };
+    part(g.points());
+    g.lines().iter().for_each(|l| part(l));
+    g.polygons().iter().filter_map(|p| p.rings.first()).for_each(|r| part(r));
+    n += g.polygons().iter().flat_map(|p| p.rings.iter().skip(1)).map(Vec::len).sum::<usize>();
+    let (lo, hi) = (lo.max(grid.ymin), hi.min(grid.ymax));
+    let rows = if hi > lo { ((hi - lo) / grid.dy()).min(grid.nrow as f64) as usize + 1 } else { 0 };
+    1 + n + rows
+}
+
 /// Burn `geoms` onto a window of `grid`: rows `rows` and columns `cols`.
 /// The records are those [`burn`] gives in the window's cells, with the
 /// same values, in the same order, and with the full grid's indices: runs
@@ -602,4 +766,92 @@ where
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Polygon;
+    use proptest::prelude::*;
+
+    fn ring(cx: f64, cy: f64, r: f64, k: usize, wobble: &[f64]) -> Vec<Coord> {
+        let mut v: Vec<Coord> = (0..k)
+            .map(|i| {
+                let a = i as f64 / k as f64 * std::f64::consts::TAU;
+                let rr = r * (0.6 + 0.4 * wobble[i % wobble.len()]);
+                Coord::new(cx + rr * a.cos(), cy + rr * a.sin())
+            })
+            .collect();
+        v.push(v[0]);
+        v
+    }
+
+    proptest! {
+        /// The parallel burn equals the serial one, record for record and
+        /// note for note, whatever the threads, options and input (the
+        /// parallel path forced on from two geometries).
+        #[test]
+        fn parallel_equals_serial(
+            centres in prop::collection::vec((-3.0..40.0f64, -3.0..26.0f64, 0.3..6.0f64, 0u8..6), 0..40),
+            wobble in prop::collection::vec(0.0..1.0f64, 9),
+            threads in 2usize..12, approx in any::<bool>(), coalesce in any::<bool>(),
+            merge in any::<bool>(), id_offset in 0i32..1000,
+        ) {
+            let grid = GridSpec::new(0.0, 0.0, 37.0, 23.0, 53, 31);
+            let geoms: Vec<Geometry> = centres
+                .iter()
+                .map(|&(x, y, r, kind)| match kind {
+                    0 => Geometry::Polygon(Polygon::new(vec![ring(x, y, r, 9, &wobble)])),
+                    1 => Geometry::MultiPolygon(vec![
+                        Polygon::new(vec![ring(x, y, r, 7, &wobble), ring(x, y, r * 0.3, 5, &wobble)]),
+                        Polygon::new(vec![ring(x + r * 0.8, y, r * 0.7, 6, &wobble)]),
+                    ]),
+                    2 => Geometry::LineString(ring(x, y, r, 8, &wobble)),
+                    3 => Geometry::MultiPoint((0..7).map(|i| Coord::new(x + i as f64 * 0.7, y - i as f64 * 0.4)).collect()),
+                    4 => Geometry::Polygon(Polygon::new(vec![])),
+                    _ => Geometry::Point(Coord::new(f64::NAN, y)),
+                })
+                .collect();
+            let opts = BurnOptions::default()
+                .with_mode(if approx { BurnMode::Approx } else { BurnMode::Coverage })
+                .with_coalesce_runs(coalesce)
+                .with_merge_parts(merge)
+                .with_id_offset(id_offset);
+            let want = burn(&geoms, &grid, opts).unwrap();
+            let got = burn_par_from(&geoms, &grid, opts, threads, 0).unwrap();
+            prop_assert_eq!(got, want);
+        }
+    }
+
+    #[test]
+    fn errors_as_serial() {
+        let sq = |x: f64| Geometry::Polygon(Polygon::new(vec![ring(x, 5.0, 3.0, 12, &[0.5])]));
+        let geoms = [sq(3.0), sq(6.0)];
+        let ok = GridSpec::new(0.0, 0.0, 10.0, 10.0, 10, 10);
+        let bad = GridSpec::new(0.0, 0.0, 10.0, 10.0, 0, 10);
+        let cases = [
+            (bad, BurnOptions::default()),
+            (ok, BurnOptions::default().with_id_offset(-1)),
+            (ok, BurnOptions::default().with_id_offset(i32::MAX)),
+        ];
+        for (grid, opts) in cases {
+            let want = burn(&geoms, &grid, opts).unwrap_err().to_string();
+            assert_eq!(burn_par_from(&geoms, &grid, opts, 4, 0).unwrap_err().to_string(), want);
+        }
+    }
+
+    #[test]
+    fn falls_back_to_serial() {
+        // one thread, one geometry, or few coordinates: same answer
+        let grid = GridSpec::new(0.0, 0.0, 10.0, 10.0, 10, 10);
+        let sq = |x: f64| Geometry::Polygon(Polygon::new(vec![ring(x, 5.0, 3.0, 12, &[0.5])]));
+        let want = burn(&[sq(4.0), sq(6.0)], &grid, BurnOptions::default()).unwrap();
+        for threads in [1, 0, 8] {
+            assert_eq!(burn_par(&[sq(4.0), sq(6.0)], &grid, BurnOptions::default(), threads).unwrap(), want);
+        }
+        let one = burn(&[sq(4.0)], &grid, BurnOptions::default()).unwrap();
+        assert_eq!(burn_par_from(&[sq(4.0)], &grid, BurnOptions::default(), 8, 0).unwrap(), one);
+        let none = burn(&[], &grid, BurnOptions::default()).unwrap();
+        assert_eq!(burn_par_from(&[], &grid, BurnOptions::default(), 8, 0).unwrap(), none);
+    }
 }

@@ -104,7 +104,7 @@ mod wkb;
 
 #[cfg(feature = "geo-traits")]
 pub use burn::burn_geo_traits;
-pub use burn::{burn, burn_window, burn_wkb, BurnMode, BurnOptions};
+pub use burn::{burn, burn_par, burn_window, burn_wkb, BurnMode, BurnOptions};
 pub use coalesce::coalesce_runs;
 pub use crop::crop;
 pub use error::{BurnError, WkbError};
