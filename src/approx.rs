@@ -77,7 +77,14 @@ pub(crate) fn orient2d_sign(a: (f64, f64), b: (f64, f64), c: (f64, f64)) -> i32 
     }
 }
 
-pub(crate) fn process_polygon_approx(poly: &Polygon, gs: &GridSpec, poly_id: i32, runs: &mut Vec<GridRun>) {
+/// `rows`: sweep only these rows (a window's), `None` for all.
+pub(crate) fn process_polygon_approx(
+    poly: &Polygon,
+    gs: &GridSpec,
+    poly_id: i32,
+    runs: &mut Vec<GridRun>,
+    rows: Option<(i64, i64)>,
+) {
     let Some(exterior) = poly.rings.first() else { return };
     if exterior.len() < 4 {
         return;
@@ -94,8 +101,9 @@ pub(crate) fn process_polygon_approx(poly: &Polygon, gs: &GridSpec, poly_id: i32
     }
 
     // Row range the polygon can touch (0-based, row 0 at the top).
-    let row_lo = (((gs.ymax - env.ymax) / dy).floor() as i64).max(0);
-    let row_hi = (((gs.ymax - env.ymin) / dy).floor() as i64).min(nrow - 1);
+    let (lo, hi) = rows.unwrap_or((0, nrow - 1));
+    let row_lo = (((gs.ymax - env.ymax) / dy).floor() as i64).max(lo);
+    let row_hi = (((gs.ymax - env.ymin) / dy).floor() as i64).min(hi);
     if row_lo > row_hi {
         return;
     }

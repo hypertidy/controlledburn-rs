@@ -95,3 +95,30 @@ for t in slice_tiles(&r, &grid, 4, 4) {
     assert_eq!((t.result.runs, t.result.edges), (c.runs, c.edges));
 }
 ```
+
+`burn_window` burns one window of the grid, given as rows and columns,
+with no whole burn: each tile can burn just the geometries that meet it.
+It gives the records the whole burn has in those cells, on the whole
+grid's indices, here checked against the tiles above. Each window walks
+the whole boundary of a polygon that meets it, so for geometries much
+larger than a tile, burning once and slicing is cheaper.
+
+```rust
+# extern crate controlledburn;
+# use controlledburn::{burn, burn_window, slice_tiles, BurnOptions, Coord, Geometry, GridSpec, Polygon};
+# let square = Geometry::Polygon(Polygon::new(vec![vec![
+#     Coord::new(2.5, 4.5), Coord::new(6.5, 4.5), Coord::new(6.5, 8.5),
+#     Coord::new(2.5, 8.5), Coord::new(2.5, 4.5),
+# ]]));
+# let grid = GridSpec::new(0.0, 0.0, 10.0, 10.0, 10, 10);
+let geoms = [square];
+let r = burn(&geoms, &grid, BurnOptions::default()).unwrap();
+for t in slice_tiles(&r, &grid, 4, 4) {
+    let rows = t.row_off..t.row_off + t.grid.nrow;
+    let cols = t.col_off..t.col_off + t.grid.ncol;
+    let w = burn_window(&geoms, &grid, rows, cols, BurnOptions::default()).unwrap();
+    let local: Vec<_> = w.edges.iter().map(|e| (e.row - t.row_off as i32, e.col - t.col_off as i32, e.fraction)).collect();
+    let tile: Vec<_> = t.result.edges.iter().map(|e| (e.row, e.col, e.fraction)).collect();
+    assert_eq!(local, tile);
+}
+```
