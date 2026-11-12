@@ -651,6 +651,36 @@ proptest! {
         }
     }
 
+    /// `merge_cells` after the burn is the burn's own merge: burning with
+    /// `merge_parts` off, then merging, gives the default burn bit for
+    /// bit (up to order), for polygons and lines, single and multi-part,
+    /// in both modes. Merging again changes nothing.
+    #[test]
+    fn merge_cells_is_the_burn_merge(((g, a), (_, b)) in grid().prop_flat_map(|g| (ring_on(g.clone()), ring_on(g)))) {
+        let ring = |r: &[(f64, f64)]| -> Vec<Coord> { r.iter().map(|&p| Coord::from(p)).collect() };
+        let poly = |r: &[(f64, f64)]| Polygon::new(vec![ring(r)]);
+        let geoms = [
+            Geometry::Polygon(poly(&a)),
+            Geometry::MultiPolygon(vec![poly(&a), poly(&b)]),
+            Geometry::MultiPolygon(vec![poly(&b), poly(&a), poly(&b)]),
+            Geometry::MultiLineString(vec![ring(&a), ring(&b)]),
+        ];
+        let sorted = |mut r: BurnResult| {
+            r.edges.sort_by_key(|e| (e.id, e.row, e.col));
+            r.lines.sort_by_key(|l| (l.id, l.row, l.col));
+            r
+        };
+        for mode in [BurnMode::Coverage, BurnMode::Approx] {
+            let want = sorted(burn(&geoms, &g.spec, BurnOptions::default().with_mode(mode)).unwrap());
+            let mut got = burn(&geoms, &g.spec, BurnOptions::parity(mode)).unwrap();
+            merge_cells(&mut got);
+            prop_assert_eq!(&got, &want, "{:?}\n{}\n{}\n{}", mode, fmt_grid(&g), fmt_ring(&a), fmt_ring(&b));
+            let mut again = got.clone();
+            merge_cells(&mut again);
+            prop_assert_eq!(&again, &got);
+        }
+    }
+
     /// A ring and its complement (a box around the ring and the grid, with
     /// the ring as its hole) add up to 1 in every cell. Each of the three
     /// rings (the ring, the box, the ring as a hole) has a random

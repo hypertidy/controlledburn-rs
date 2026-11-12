@@ -4,7 +4,9 @@ use std::fmt;
 
 /// The fatal errors: an invalid grid, buffer or options.
 /// Everything else is reported per geometry in `BurnResult::notes`.
+/// Non-exhaustive: a later version may add variants.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum BurnError {
     /// `ncol` or `nrow` is zero, or the extent is empty or inverted.
     InvalidGrid(String),
@@ -33,8 +35,10 @@ impl fmt::Display for BurnError {
 impl std::error::Error for BurnError {}
 
 /// A WKB parse failure. `Display` renders the same message text as the
-/// C++ core so notes stay comparable.
+/// C++ core so notes stay comparable. Non-exhaustive: a later version
+/// may add variants.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum WkbError {
     TooShort,
     BadByteOrder(u8),

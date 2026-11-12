@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Breaking: `BurnOptions`, `BurnError` and `WkbError` are
+  `#[non_exhaustive]`**, so later versions can add options and error
+  variants without breaking callers. Build options with `default()`,
+  `coverage()`, `approx()`, `parity()` and the `with_*` methods (the
+  fields can still be read and set); a `match` on either error needs a
+  `_` arm.
+- **`merge_cells`: one record per cell and id for a whole result**, by
+  the rule `burn` uses for multi-part geometries. For records that come
+  together after a burn, such as a curvilinear or periodic front end
+  folding columns back (`design/grid-frontends.md`). A property test
+  checks that burning with `merge_parts` off and then merging gives the
+  default burn bit for bit.
 - **`slice_tiles_par`: `slice_tiles` on several threads**, with the same
   tiles and records in the same order (std threads only; `threads = 0` for
   all available, which is 1 on targets without threads). Records are

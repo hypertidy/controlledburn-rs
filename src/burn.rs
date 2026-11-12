@@ -28,9 +28,15 @@ pub enum BurnMode {
     Approx,
 }
 
-/// Options for a burn.
+/// Options for a burn. Build one from [`BurnOptions::default`],
+/// [`coverage`](BurnOptions::coverage), [`approx`](BurnOptions::approx) or
+/// [`parity`](BurnOptions::parity) and the `with_*` methods. The fields
+/// can be read and set, but the struct is non-exhaustive, so it can't be
+/// written as a literal outside this crate: a later version may add
+/// options without breaking callers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub struct BurnOptions {
     pub mode: BurnMode,
     /// Merge adjacent runs on a row (default `true`). With `false` the
