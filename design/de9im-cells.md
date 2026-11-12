@@ -1,6 +1,8 @@
 # DE-9IM per cell from the coverage traversal
 
-Status: discussion. Scope: the proposal to decode DE-9IM(P, C) for a polygon P and each grid
+Status: discussion, with a prototype of the after-the-burn route
+(`examples/relate_cells.rs`, section "After the burn" below), which
+replaces steps 1 and 2 of the recommendation. Scope: the proposal to decode DE-9IM(P, C) for a polygon P and each grid
 cell box C from the coverage fraction f, a one-byte contact mask per edge
 cell, and one bit per geometry; with a parallel `edge_contact: Vec<u8>`
 column and a `touches` table (cells with f = 0 and wall or corner
@@ -129,9 +131,92 @@ Burning all 300 polygons at 2048 took about 0.1 s. The filter in the
 example uses hash sets and is slow; a real one merges sorted run
 intervals per row, which is the APRIL design.
 
+## After the burn: tables plus geometry, no walker change
+
+The matrix does not have to come out of the walk. Given a finished burn
+and the polygon, every entry can be computed afterwards, and only the
+cells the boundary touches need the geometry.
+
+- **No boundary contact** (the cell's closed box meets no boundary
+  segment): the open cell is wholly inside or outside P, so its coverage
+  is exactly 1 or 0 and the record is exact. Run: `212FF1FF2` (IE / BE
+  F only if P lies inside the cell). No record: `FF2FF1212`. This is
+  nearly every cell, and costs nothing.
+- **Candidates**, the cells whose closed box a boundary segment meets,
+  found from the geometry (segments binned by cell, then an exact
+  separating-axis test with robust orientation). These include the
+  touches cells (f = 0, contact on a wall or corner), so the walker
+  never has to emit them. Per candidate:
+  - BI: a segment meets the open box (strict separating axes).
+  - BB: 1 if a segment lies along a wall with positive length, 0 for
+    point contact, F for none.
+  - IB / EB: the outline's arcs between contacts each lie wholly inside
+    or outside P; one point-in-polygon test at each arc's middle decides
+    it. No contact at all: one test at a corner.
+  - II / EI: both 2 if BI (a boundary through the open cell leaves area
+    on both sides), else the cell centre's position.
+  - IE / BE: F only if P's bounding box lies inside the closed cell. EE
+    is always 2.
+
+The record set is **not** exact topology on its own. The burn treats
+coverage within 1e-6 of 0 or 1 as 0 or 1 (`tol` in `src/polygon.rs`,
+from the C++ core and exactextract), so a cell holding a sliver of P or
+of its exterior has no record or a run. Taking II / EI and the candidate
+set from the records (variant A below) is wrong exactly there; taking
+them from the geometry on candidate cells (variant B) is exact. Outside
+the candidates there is no boundary, so there the records are exact.
+
+Checked against `geo::Relate(P, cell box)` on every cell within two of
+P's bounding box: 11 fixed cases (wall-aligned square, P equal to a
+cell, hole equal to a cell, P strictly inside one cell, P in one cell
+with vertices on walls, a corner-touching diamond, a diagonal through
+corners, P crossing the extent, P along the extent, an L-shape, a hole
+touching the outer ring) and 200 random star polygons per row, half
+with a hole:
+
+| polygons | grid | cells | wrong, A (records) | wrong, B (geometry) |
+|---|---|---|---|---|
+| fixed cases | 8² | 581 | 0 | 0 |
+| float vertices | 16² | 18,645 | 3 | 0 |
+| float vertices | 64² | 119,330 | 24 | 0 |
+| float vertices | 256² | 1,227,205 | 87 | 0 |
+| vertices on a 0.5 lattice | 16², 64², 256² | 1.27 M | 0 | 0 |
+| vertices on cell corners | 16², 64², 256² | 1.40 M | 0 | 0 |
+
+Every variant-A error is in II or EI, on a cell whose exact coverage is
+within 1e-6 of 0 or 1 (2.7e-7 to 1.0e-6 in the examples printed).
+
+Cost: at 256², the relate step (variant B) for 200 polygons took 0.14-0.16 s,
+including a matrix for every cell in each bounding box, against
+8-10 s for `geo::Relate` per cell, and 0.018 s for the burns. The
+prototype uses hash maps and a point-in-polygon test over the whole
+ring; a real version would walk boundary cells in order and take arc
+sides from the ring's orientation at each contact, so its cost is the
+number of candidate cells, about the perimeter in cells.
+
+What this changes:
+- No walker change, so no risk to the exactextract-derived code or the
+  golden and canon tables; no new column through coalesce, merge_parts,
+  crop, slice, merge_cells or burn_par; no change to `BurnResult`.
+- It applies to any burn, including a stored one, cropped or sliced
+  (relate the tile you have), as long as the geometry is at hand.
+- Exact ALL_TOUCHED is "records plus candidate cells".
+- Multi-part geometries: OR the parts' contacts per cell (valid
+  multipolygons meet at points only).
+- Same limits as before: index space on non-affine grids, and the
+  grid's walls must be computed as the burn computes them (exact here,
+  with integer walls).
+
 ## Recommendation
 
-Worth pursuing, in two small steps in controlledburn-rs:
+Updated after the prototype: compute the matrix after the burn, from the
+tables and the geometry, as above. A `relate_cells(result, geometry,
+grid)` returning matrices or masks for the candidate cells (and the
+predicate shortcuts: covers, intersects, touches, exact ALL_TOUCHED) can
+be added without touching the burn. The walk-time route below stays an
+option if the after-the-burn cost ever matters.
+
+The original plan, in two small steps in controlledburn-rs:
 1. `edge_contact: Vec<u8>` behind an option (IB, EB, BB bits; drop BI or
    keep it as a validity flag), plus wall-aligned f = 1 cells surfaced.
    Fixtures: wall-aligned square, corner-touching squares, hole equal to

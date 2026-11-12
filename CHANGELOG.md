@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Prototype: DE-9IM per cell after the burn**
+  (`examples/relate_cells.rs`, `design/de9im-cells.md`). From a finished
+  burn and the polygon, the full matrix of the polygon against every
+  cell, with the geometry needed only on cells the boundary touches;
+  no change to the burn. Exact against `geo::Relate` on 4.0 M cells
+  (fixed edge cases, random polygons with holes, vertices on walls and
+  corners), 50-60x faster than relating each cell. Taking topology from
+  the records alone is wrong on cells within the burn's 1e-6 coverage
+  tolerance of empty or full; the prototype takes those from the
+  geometry.
 - **The book has figures.** `examples/render_figures.rs` is rewritten to
   write SVG by hand (no dependencies; `plotters` is gone from the
   dev-dependencies) and draws eight figures from real burns: the
