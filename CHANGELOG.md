@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 (2026-11-12)
+
+Adds `relate_cells`, `CellRelation` and `IntersectionMatrix`: DE-9IM of
+polygons against grid cells, after the burn. Nothing else in the API
+changes, and burns give the same records as 0.3.0. The book has figures
+and a chapter on the new function.
 
 - **Book: "Predicates per cell"**, on `relate_cells`: the burn as a
   lookup table generalised to DE-9IM, a figure of covered, partly
