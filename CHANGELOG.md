@@ -8,7 +8,7 @@
   cell, with the geometry needed only on cells the boundary touches;
   no change to the burn. Exact against `geo::Relate` on 4.0 M cells
   (fixed edge cases, random polygons with holes, vertices on walls and
-  corners), 50-60x faster than relating each cell. Taking topology from
+  corners), about 60 times faster than relating each cell. Taking topology from
   the records alone is wrong on cells within the burn's 1e-6 coverage
   tolerance of empty or full; the prototype takes those from the
   geometry.
