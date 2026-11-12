@@ -9,6 +9,10 @@
   `with_fn`, `with_edge_policy`, `with_threshold`; the fields can still
   be read and set. A `match` on `PixelFn` or `EdgePolicy` outside the
   crate needs a `_` arm.
+- **Edge fractions stay `f32`** (decision on #23, rwarp N6). The
+  contract chapter and `GridEdge` now say why and how precise they are:
+  computed in `f64`, stored as `f32`, about 6e-8 of a cell; `f64` over a
+  window is `CoverageWindow`.
 - **Docs reviewed for 0.3.0.** The README and crate docs no longer
   describe the crate as regular-grid only: they say the engine works on
   a regular lattice and other grids go through index space (a Grids

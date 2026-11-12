@@ -127,6 +127,14 @@ binding for a 1-based language adds 1 at its boundary.
 | `lines` | `row, col, length, id` | geometry `id` has `length` units of line inside cell `(row, col)` |
 | `points` | `row, col, id` | geometry `id` has a point in cell `(row, col)` |
 
+The measures are `f32` on purpose. Each is computed in `f64` and
+rounded when the record is written, so a fraction is good to about
+6e-8 of its cell, on any grid; the sum over a polygon is good to about
+1e-7 relative. `f32` keeps an edge record at 16 bytes rather than 24,
+and edges are most of a coverage result. A caller that needs `f64`
+fractions over a window has `CoverageWindow`, or `RowPrefix` for
+prefix sums.
+
 That is the whole contract. There is no raster object, no CRS, no
 attribute handling, and no I/O: those belong to whatever wraps the
 crate.
