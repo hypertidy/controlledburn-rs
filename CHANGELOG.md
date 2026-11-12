@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- **`relate_cells`: DE-9IM of polygons against grid cells, after the
+  burn.** From a finished burn and the same geometries, the intersection
+  matrix (`IntersectionMatrix`, with `covers`, `intersects`, `touches`,
+  `interiors_meet`, `covered_by` and DE-9IM pattern `matches`) of each
+  polygon against each in-grid cell its boundary touches, including
+  cells it only touches along a wall or at a corner, which have no
+  record. Every other cell is `COVERED` (in a run) or `DISJOINT`, so the
+  two give every cell's matrix, and an exact all-touched set is the runs
+  plus the relations that intersect. Local: candidates come from walking
+  each segment row by row with exact orientation tests, and the inside or
+  outside of each cell's outline from the branches the boundary sends
+  into the cell, seeded from neighbouring records; no whole-ring
+  point-in-polygon except for a group of cells no record reaches. Any
+  burn options (either mode, `merge_parts`, `coalesce_runs`,
+  `id_offset`). Checked against `geo::Relate` on every cell near each
+  polygon: fixed edge cases (walls, corners, holes equal to or touching
+  cells, polygons inside one cell, across and along the extent),
+  multi-polygons, random polygons with holes with vertices free, on half
+  cells and on cell corners, a non-dyadic grid; the tests fail when either
+  branch rule is broken. On the world's countries at 0.01 degree (1.1 M
+  boundary cells) it takes 0.78 s after a 0.21 s burn. Topology is not
+  read from the records on boundary cells: the burn treats coverage within
+  1e-6 of 0 or 1 as 0 or 1, and at 0.1 degree 182 cells are partly covered
+  that the burn rounds to empty or full.
 - **Prototype: DE-9IM per cell after the burn**
   (`examples/relate_cells.rs`, `design/de9im-cells.md`). From a finished
   burn and the polygon, the full matrix of the polygon against every

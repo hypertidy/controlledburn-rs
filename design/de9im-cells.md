@@ -1,8 +1,11 @@
 # DE-9IM per cell from the coverage traversal
 
-Status: discussion, with a prototype of the after-the-burn route
-(`examples/relate_cells.rs`, section "After the burn" below), which
-replaces steps 1 and 2 of the recommendation. Scope: the proposal to decode DE-9IM(P, C) for a polygon P and each grid
+Status: implemented as `relate_cells` (`src/relate.rs`), the
+after-the-burn route below, made local: candidate cells from walking
+each segment row by row, and inside/outside on each cell's outline from
+the branches the boundary sends into the cell, seeded from neighbouring
+records, with no whole-ring point-in-polygon. The prototype is
+`examples/relate_cells.rs`. Scope: the proposal to decode DE-9IM(P, C) for a polygon P and each grid
 cell box C from the coverage fraction f, a one-byte contact mask per edge
 cell, and one bit per geometry; with a parallel `edge_contact: Vec<u8>`
 column and a `touches` table (cells with f = 0 and wall or corner

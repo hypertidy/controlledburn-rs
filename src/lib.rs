@@ -56,6 +56,10 @@
 //! * Tiles: [`slice_tiles`], [`slice_tiles_par`], and [`crop`] for one
 //!   window.
 //! * Pixels: [`materialize`].
+//! * Predicates per cell: [`relate_cells`], the DE-9IM matrix
+//!   ([`IntersectionMatrix`]) of each polygon against each cell its
+//!   boundary touches, after the burn; with the runs, every cell's
+//!   (covers, intersects, touches, exact all-touched).
 //! * Records: [`merge_cells`] (one record per cell and id, after a fold
 //!   or a concatenation), [`coalesce_runs`].
 //! * Dense, for small rings in index space: [`CoverageWindow`],
@@ -117,6 +121,7 @@ mod merge;
 mod output;
 mod point;
 mod polygon;
+mod relate;
 mod tiles;
 #[cfg(feature = "geo-traits")]
 pub mod traits;
@@ -135,6 +140,7 @@ pub use grid::GridSpec;
 pub use materialize::{materialize, EdgePolicy, MaterializeOptions, PixelFn};
 pub use merge::merge_cells;
 pub use output::{BurnResult, GridEdge, GridLine, GridPoint, GridRun, Note};
+pub use relate::{relate_cells, CellRelation, IntersectionMatrix};
 pub use tiles::{slice_tiles, slice_tiles_par, Tile};
 pub use window::{ring_area, CoverageWindow, Measure, RowPrefix};
 pub use wkb::parse_wkb;
