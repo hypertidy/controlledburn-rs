@@ -3,6 +3,7 @@
 [controlledburn](index.md)
 
 - [The contract](contract.md)
+- [Grids beyond the lattice](grids.md)
 - [Sparse versus dense](sparse-vs-dense.md)
 - [Coverage versus approx](coverage-vs-approx.md)
 - [Lines and points](lines-and-points.md)

@@ -11,6 +11,8 @@ the window outward to whole cells, and re-bases every row/column index to 0
 (the window's top-left cell) so the cropped result stands on its own. There is no dense buffer in sight;
 the cost is proportional to the number of records, not the number of pixels.
 
+![The square's burn with a window drawn on it, and the cropped 4 by 4 tile with its rows and columns counted from 0](img/crop.svg)
+
 Because a `BurnResult` carries no grid metadata of its own, you pass the
 `GridSpec` the result was burned into, and `crop` hands back the snapped
 sub-grid alongside the cropped tables. That sub-grid feeds straight into
