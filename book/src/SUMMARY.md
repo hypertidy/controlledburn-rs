@@ -10,4 +10,5 @@
 - [Materialize, chunk by chunk](materialize.md)
 - [Cropping to a tile](crop.md)
 - [Zonal statistics from the tables](zonal.md)
+- [Predicates per cell](relate.md)
 - [Wrapping the crate](wrapping.md)

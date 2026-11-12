@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Book: "Predicates per cell"**, on `relate_cells`: the burn as a
+  lookup table generalised to DE-9IM, a figure of covered, partly
+  covered and touching cells, exact all-touched, a lookup for any cell's
+  matrix, and on Natural Earth at one degree the cells touching Egypt,
+  the United States and Canada along borders that lie on cell walls, and
+  the 12 + 6 sliver cells the burn's tolerance rounds away. The figure
+  renderer draws it (`relate.svg`).
 - **`relate_cells`: DE-9IM of polygons against grid cells, after the
   burn.** From a finished burn and the same geometries, the intersection
   matrix (`IntersectionMatrix`, with `covers`, `intersects`, `touches`,
