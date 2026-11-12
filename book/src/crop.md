@@ -99,7 +99,7 @@ for t in slice_tiles(&r, &grid, 4, 4) {
 ```
 
 `slice_tiles_par` gives the same tiles on several threads, and
-`burn_par` the same burn.
+`burn_par` (or `burn_wkb_par`, from WKB) the same burn.
 
 `burn_window` burns one window of the grid, given as rows and columns,
 with no whole burn: each tile can burn just the geometries that meet it.

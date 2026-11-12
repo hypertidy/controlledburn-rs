@@ -189,6 +189,111 @@ pub fn parse_wkb(data: &[u8]) -> Result<Geometry, WkbError> {
     }
 }
 
+/// What [`crate::burn`]'s work estimate needs from one blob, read without
+/// building the geometry: the number of coordinates, and the y-range of at
+/// most 16 coordinates of each part (the exterior ring of a polygon; a
+/// multi-point's points are one part), the same coordinates the estimate
+/// samples from a parsed geometry. `None` for a blob that does not parse
+/// (or a type it cannot burn).
+pub(crate) fn sample_extent(data: &[u8]) -> Option<(usize, f64, f64)> {
+    if data.len() < 5 {
+        return None;
+    }
+    let mut cur = Cursor::new(data);
+    let t = read_header(&mut cur).ok()?;
+    let mut s = Sample { n: 0, lo: f64::INFINITY, hi: f64::NEG_INFINITY };
+    match t.base {
+        1 => {
+            let c = read_point(&mut cur, t.extra_dims).ok()?;
+            s.take(1, 0, c.y);
+        }
+        2 => s.seq(&mut cur, t.extra_dims, true)?,
+        3 => s.polygon(&mut cur, t.extra_dims)?,
+        4 => {
+            let n = cur.read_u32().ok()? as usize;
+            if n > cur.remaining() / 21 {
+                return None;
+            }
+            for i in 0..n {
+                let pt = read_nested_header(&mut cur, 1).ok()?;
+                let c = read_point(&mut cur, pt.extra_dims).ok()?;
+                s.take(n, i, c.y);
+            }
+        }
+        5 => {
+            let n = cur.read_u32().ok()? as usize;
+            for _ in 0..n {
+                let lt = read_nested_header(&mut cur, 2).ok()?;
+                s.seq(&mut cur, lt.extra_dims, true)?;
+            }
+        }
+        6 => {
+            let n = cur.read_u32().ok()? as usize;
+            for _ in 0..n {
+                let pt = read_nested_header(&mut cur, 3).ok()?;
+                s.polygon(&mut cur, pt.extra_dims)?;
+            }
+        }
+        _ => return None,
+    }
+    Some((s.n, s.lo, s.hi))
+}
+
+struct Sample {
+    n: usize,
+    lo: f64,
+    hi: f64,
+}
+
+impl Sample {
+    /// Coordinate `i` of a part of `len`, with ordinate `y`: counted, and
+    /// its y kept when it is one of the sampled ones.
+    fn take(&mut self, len: usize, i: usize, y: f64) {
+        self.n += 1;
+        let step = (len + 15) / 16;
+        if i % step == 0 || i + 1 == len {
+            self.lo = self.lo.min(y);
+            self.hi = self.hi.max(y);
+        }
+    }
+
+    /// A coordinate sequence: sampled if `sample`, else only counted.
+    fn seq(&mut self, cur: &mut Cursor<'_>, extra: usize, sample: bool) -> Option<()> {
+        let n = cur.read_u32().ok()? as usize;
+        let stride = 2 + extra;
+        if n > cur.remaining() / (8 * stride) {
+            return None;
+        }
+        if !sample || n == 0 {
+            self.n += n;
+            return cur.skip_f64(n * stride).ok();
+        }
+        let step = (n + 15) / 16;
+        let mut at = 0;
+        for i in (0..n).step_by(step).chain(std::iter::once(n - 1)) {
+            if i < at {
+                continue;
+            }
+            cur.skip_f64((i - at) * stride + 1).ok()?;
+            let y = cur.read_f64().ok()?;
+            cur.skip_f64(extra).ok()?;
+            self.lo = self.lo.min(y);
+            self.hi = self.hi.max(y);
+            at = i + 1;
+        }
+        self.n += n;
+        cur.skip_f64((n - at) * stride).ok()
+    }
+
+    fn polygon(&mut self, cur: &mut Cursor<'_>, extra: usize) -> Option<()> {
+        let rings = cur.read_u32().ok()? as usize;
+        for r in 0..rings {
+            self.seq(cur, extra, r == 0)?;
+        }
+        Some(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
