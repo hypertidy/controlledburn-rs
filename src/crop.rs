@@ -161,7 +161,7 @@ mod tests {
     // row-major buffer, treating never-touched cells as NaN.
     fn dense(r: &BurnResult, g: &GridSpec) -> Vec<f64> {
         let mut buf = vec![f64::NAN; (g.ncol * g.nrow) as usize];
-        let opts = MaterializeOptions { fn_: PixelFn::Sum, edge_policy: EdgePolicy::Fraction, threshold: 0.5 };
+        let opts = MaterializeOptions::new(PixelFn::Sum, EdgePolicy::Fraction);
         materialize(r, &mut buf, g.ncol, g.nrow, None, &opts).unwrap();
         buf
     }

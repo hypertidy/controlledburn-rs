@@ -191,7 +191,7 @@ fn materialize_policies() {
     assert!(buf.iter().filter(|v| !v.is_nan()).all(|v| *v == 0.0), "burned value is the id, 0");
 
     let mut buf = vec![f64::NAN; 100];
-    let opts = MaterializeOptions { fn_: PixelFn::Sum, edge_policy: EdgePolicy::Fraction, threshold: 0.5 };
+    let opts = MaterializeOptions::new(PixelFn::Sum, EdgePolicy::Fraction);
     materialize(&r, &mut buf, 10, 10, Some(&[2.0]), &opts).unwrap();
     let total: f64 = buf.iter().filter(|v| !v.is_nan()).sum();
     assert!(near(total, 32.0, 1e-6));

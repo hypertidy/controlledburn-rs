@@ -22,7 +22,7 @@ fn shade(frac: f64) -> RGBColor {
 /// geometries), computed with the crate's own `materialize`.
 fn paint(path: &str, r: &BurnResult, ncol: u32, nrow: u32, scale: u32, grid_lines: bool) {
     let mut cov = vec![f64::NAN; ncol as usize * nrow as usize];
-    let opts = MaterializeOptions { fn_: PixelFn::Sum, edge_policy: EdgePolicy::Fraction, threshold: 0.5 };
+    let opts = MaterializeOptions::new(PixelFn::Sum, EdgePolicy::Fraction);
     materialize(r, &mut cov, ncol, nrow, Some(&vec![1.0; 1 << 16]), &opts).unwrap();
 
     let (w, h) = (ncol * scale, nrow * scale);
