@@ -86,6 +86,12 @@ even. For a single window, or tile extents that
 are not a regular grid, use `crop`. It returns the same tables but scans
 the whole result on every call, so don't loop it over a tile grid.
 
+- *Per tile*: `burn_window(&geoms, &grid, rows, cols, opts)` burns onto
+  a window of the grid (full-grid indices; the same records as the whole
+  burn in those cells), so each tile can burn just the geometries that
+  meet it, on its own worker. Cheap for geometries small next to the
+  tile; a geometry much larger than the tile is walked whole for each
+  tile it meets, so burn those once and slice (`design/tile-parallel.md`).
 - *Parallel*: split the geometries across workers, burn each subset
   onto the same grid with `BurnOptions::default().with_id_offset(start)`,
   and concatenate the tables. Records are per geometry, so nothing needs

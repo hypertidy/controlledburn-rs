@@ -1,9 +1,11 @@
 //! Public entry points: `burn` and `burn_wkb`.
 
 use std::borrow::Cow;
+use std::ops::Range;
 
 use crate::approx::process_polygon_approx;
 use crate::coalesce::coalesce_sorted_from;
+use crate::ee::bbox::BBox;
 use crate::error::BurnError;
 use crate::geometry::{Geometry, Polygon};
 use crate::grid::{Grid, GridSpec};
@@ -165,6 +167,68 @@ fn normalize(g: &Geometry) -> Cow<'_, Geometry> {
     })
 }
 
+/// A window of the grid: rows `r0..r1`, columns `c0..c1`, and `near`,
+/// its box widened by two cells each side (lines are walked only there).
+struct Win {
+    r0: i32,
+    r1: i32,
+    c0: i32,
+    c1: i32,
+    rows: Range<usize>,
+    cols: Range<usize>,
+    near: BBox,
+}
+
+impl Win {
+    fn new(gs: &GridSpec, rows: &Range<u32>, cols: &Range<u32>) -> Self {
+        let (dx, dy) = (gs.dx(), gs.dy());
+        let x = |c: f64| gs.xmin + c * dx;
+        let y = |r: f64| gs.ymax - r * dy;
+        let (r0, r1) = (f64::from(rows.start) - 2.0, f64::from(rows.end) + 2.0);
+        let (c0, c1) = (f64::from(cols.start) - 2.0, f64::from(cols.end) + 2.0);
+        Win {
+            near: BBox::new(x(c0), y(r1), x(c1), y(r0)),
+            r0: rows.start as i32,
+            r1: rows.end as i32,
+            c0: cols.start as i32,
+            c1: cols.end as i32,
+            rows: rows.start as usize..rows.end as usize,
+            cols: cols.start as usize..cols.end as usize,
+        }
+    }
+
+    fn has(&self, row: i32, col: i32) -> bool {
+        (self.r0..self.r1).contains(&row) && (self.c0..self.c1).contains(&col)
+    }
+}
+
+/// Keep the records from `run_start`, `edge_start` and `line_start` on
+/// that lie in `win`, cutting runs at its columns.
+fn clip(out: &mut BurnResult, win: &Win, run_start: usize, edge_start: usize, line_start: usize) {
+    let mut w = run_start;
+    for i in run_start..out.runs.len() {
+        let mut r = out.runs[i];
+        r.col_start = r.col_start.max(win.c0);
+        r.col_end = r.col_end.min(win.c1);
+        if (win.r0..win.r1).contains(&r.row) && r.col_start < r.col_end {
+            out.runs[w] = r;
+            w += 1;
+        }
+    }
+    out.runs.truncate(w);
+    let mut i = edge_start;
+    out.edges.retain(|e| {
+        i += 1;
+        i <= edge_start || win.has(e.row, e.col)
+    });
+    let mut i = line_start;
+    out.lines.retain(|l| {
+        i += 1;
+        i <= line_start || win.has(l.row, l.col)
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
 fn process_geometry(
     g: &Geometry,
     full_grid: &Grid<0>,
@@ -173,6 +237,7 @@ fn process_geometry(
     out: &mut BurnResult,
     opts: &BurnOptions,
     sc: &mut CoverageScratch,
+    win: Option<&Win>,
 ) -> Result<(), String> {
     let run_start = out.runs.len();
     let edge_start = out.edges.len();
@@ -181,9 +246,18 @@ fn process_geometry(
     note_short_rings(polys, geom_id, out);
     for poly in polys {
         match opts.mode {
-            BurnMode::Approx => process_polygon_approx(poly, gs, geom_id, &mut out.runs),
-            BurnMode::Coverage => process_polygon(poly, full_grid, geom_id, &mut out.runs, &mut out.edges, sc)?,
+            BurnMode::Approx => {
+                let rows = win.map(|w| (i64::from(w.r0), i64::from(w.r1) - 1));
+                process_polygon_approx(poly, gs, geom_id, &mut out.runs, rows)
+            }
+            BurnMode::Coverage => {
+                let w = win.map(|w| (&w.rows, &w.cols));
+                process_polygon(poly, full_grid, geom_id, &mut out.runs, &mut out.edges, sc, w)?
+            }
         }
+    }
+    if let Some(w) = win {
+        clip(out, w, run_start, edge_start, line_start);
     }
     let merge = opts.merge_parts && polys.len() > 1;
     if merge {
@@ -206,13 +280,24 @@ fn process_geometry(
         if line.len() == 1 {
             out.note(geom_id, format!("skipped line part {i}: 1 coordinate, 2 needed"));
         }
-        process_line(line, full_grid, geom_id, &mut out.lines)?;
+        process_line(line, full_grid, geom_id, &mut out.lines, win.map(|w| &w.near))?;
+    }
+    if let Some(w) = win {
+        clip(out, w, out.runs.len(), out.edges.len(), line_start);
     }
     if opts.merge_parts && g.lines().len() > 1 {
         merge_part_lines(out, line_start);
     }
+    let point_start = out.points.len();
     for pt in g.points() {
         process_point(pt, full_grid, geom_id, &mut out.points);
+    }
+    if let Some(w) = win {
+        let mut i = point_start;
+        out.points.retain(|p| {
+            i += 1;
+            i <= point_start || w.has(p.row, p.col)
+        });
     }
     Ok(())
 }
@@ -319,6 +404,7 @@ fn merge_part_lines(out: &mut BurnResult, start: usize) {
     lines.truncate(w);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn burn_one(
     g: &Geometry,
     id: i32,
@@ -327,6 +413,7 @@ fn burn_one(
     out: &mut BurnResult,
     opts: &BurnOptions,
     sc: &mut CoverageScratch,
+    win: Option<&Win>,
 ) {
     if g.is_empty() {
         return;
@@ -336,7 +423,7 @@ fn burn_one(
         return;
     }
     let g = normalize(g);
-    if let Err(e) = process_geometry(&g, full_grid, gs, id, out, opts, sc) {
+    if let Err(e) = process_geometry(&g, full_grid, gs, id, out, opts, sc, win) {
         out.note(id, format!("error processing geometry: {e}"));
     }
 }
@@ -363,7 +450,7 @@ pub fn burn(geoms: &[Geometry], grid: &GridSpec, opts: impl Into<BurnOptions>) -
     let mut out = BurnResult::default();
     let mut sc = CoverageScratch::default();
     for (k, g) in geoms.iter().enumerate() {
-        burn_one(g, opts.id(k)?, &full_grid, grid, &mut out, &opts, &mut sc);
+        burn_one(g, opts.id(k)?, &full_grid, grid, &mut out, &opts, &mut sc, None);
     }
     Ok(out)
 }
@@ -387,9 +474,90 @@ where
         }
         let id = opts.id(k)?;
         match parse_wkb(blob) {
-            Ok(g) => burn_one(&g, id, &full_grid, grid, &mut out, &opts, &mut sc),
+            Ok(g) => burn_one(&g, id, &full_grid, grid, &mut out, &opts, &mut sc, None),
             Err(e) => out.note(id, format!("failed to parse WKB: {e}")),
         }
+    }
+    Ok(out)
+}
+
+/// Burn `geoms` onto a window of `grid`: rows `rows` and columns `cols`.
+/// The records are those [`burn`] gives in the window's cells, with the
+/// same values, in the same order, and with the full grid's indices: runs
+/// are cut at the window's columns, and nothing outside it is kept. The
+/// windows of a tiling put together are the whole-grid burn, so each tile
+/// can burn just the geometries that meet it, on its own thread or
+/// machine (see `design/tile-parallel.md`).
+///
+/// The window keeps the full grid's lattice and edge rules: every wall
+/// and cell centre is the full grid's, a line on a wall stays in the cell
+/// the whole-grid burn gives it, and a point on a seam between windows is
+/// in exactly one of them (only the grid's own right and bottom edges are
+/// closed). [`slice_tiles`](crate::slice_tiles) of the whole burn gives
+/// the same records, indexed on each tile.
+///
+/// Notes are as [`burn`] gives them, for every geometry in `geoms`.
+///
+/// Each geometry is burned as [`burn`] burns it, on the same sub-grid, so
+/// the values are the same computation, not a recomputation: a polygon's
+/// rows outside the window are skipped (they are independent) but its
+/// boundary is walked whole; a line is walked only along its runs of
+/// segments that pass within two cells of the window (the walker computes
+/// each crossing from the segment's own vertices, so a walk started
+/// mid-line agrees with the whole walk away from its start); points and
+/// the columns outside the window are filtered. So a window costs about
+/// the vertices of the polygons that meet it, plus its own output. For a
+/// polygon much larger than the window, burning once and slicing is
+/// cheaper.
+///
+/// The errors are those of [`burn`], and an empty window or one outside
+/// the grid (`InvalidGrid`).
+///
+/// # Examples
+///
+/// ```
+/// use controlledburn::{burn, burn_window, BurnOptions, Coord, Geometry,
+///     GridSpec, Polygon};
+///
+/// let square = Geometry::Polygon(Polygon::new(vec![vec![
+///     Coord::new(2.5, 4.5), Coord::new(6.5, 4.5), Coord::new(6.5, 8.5),
+///     Coord::new(2.5, 8.5), Coord::new(2.5, 4.5),
+/// ]]));
+/// let grid = GridSpec::new(0.0, 0.0, 10.0, 10.0, 10, 10);
+/// let geoms = [square];
+///
+/// // the left and right halves of the grid
+/// let left = burn_window(&geoms, &grid, 0..10, 0..5, BurnOptions::default()).unwrap();
+/// let right = burn_window(&geoms, &grid, 0..10, 5..10, BurnOptions::default()).unwrap();
+/// let whole = burn(&geoms, &grid, BurnOptions::default()).unwrap();
+/// assert!(left.runs.iter().all(|r| r.col_end <= 5));
+/// assert_eq!(left.covered_cells() + right.covered_cells(), whole.covered_cells());
+/// ```
+pub fn burn_window(
+    geoms: &[Geometry],
+    grid: &GridSpec,
+    rows: Range<u32>,
+    cols: Range<u32>,
+    opts: impl Into<BurnOptions>,
+) -> Result<BurnResult, BurnError> {
+    grid.validate()?;
+    if rows.is_empty() || cols.is_empty() || rows.end > grid.nrow || cols.end > grid.ncol {
+        return Err(BurnError::InvalidGrid(format!(
+            "window rows {rows:?}, cols {cols:?} must be non-empty and within {} rows, {} cols",
+            grid.nrow, grid.ncol
+        )));
+    }
+    let opts = opts.into();
+    opts.validate()?;
+    if let Some(last) = geoms.len().checked_sub(1) {
+        opts.id(last)?;
+    }
+    let win = Win::new(grid, &rows, &cols);
+    let full_grid = grid.bounded();
+    let mut out = BurnResult::default();
+    let mut sc = CoverageScratch::default();
+    for (k, g) in geoms.iter().enumerate() {
+        burn_one(g, opts.id(k)?, &full_grid, grid, &mut out, &opts, &mut sc, Some(&win));
     }
     Ok(out)
 }

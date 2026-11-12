@@ -83,10 +83,16 @@ How close controlledburn-rs gets today, burning each tile's batch onto
 the tile's own `GridSpec` and comparing with the whole-grid burn sliced
 into the same tiles:
 
-- **Polygons: identical.** Every tile and every record, in both modes,
-  on cb-compare's `rects` (1,997 rectangles on a non-dyadic 1000 × 700
-  grid, a quarter with corners on lattice lines), and the rock outcrops
-  at 1024 m and 256 m (25,954 polygons); about 1.8 M records in all.
+- **Polygons: identical here, but not in general.** Every tile and
+  every record, in both modes, on cb-compare's `rects` (1,997 rectangles
+  on a non-dyadic 1000 × 700 grid, a quarter with corners on lattice
+  lines), and the rock outcrops at 1024 m and 256 m (25,954 polygons);
+  about 1.8 M records in all. But a coverage fraction depends on the
+  sub-grid it is computed on (its origin sets the walls' rounding, and
+  the vertices it snaps), so a tile's sub-grid can give a fraction one
+  `f32` step away from the whole burn's: the window burn's property test
+  found one on a grid with its origin far from zero, when the window
+  burn still clipped the sub-grid to the window.
 - **Points on a seam: counted twice.** A tile's own grid closes its own
   right and bottom edges, so a point exactly on a seam lands in both
   tiles (37 extra points on the 1024 m rock grid, with points on every
@@ -110,7 +116,39 @@ large geometry over small tiles it is the whole cost.
 
 ### The window burn (the controlledburn-rs piece)
 
-A sketch, not a settled API:
+Implemented as `burn_window` (the sketch below is its signature).
+It is exact by construction: a polygon is burned on the sub-grid the
+whole burn uses, with only the window's rows swept (rows are
+independent in the sweep), and a line is walked along its parts near
+the window, each walk started at a vertex inside one cell, clear of the
+walls (a segment along a wall stays on the side the walk came from, so
+a walk can't start at a corner). Points and the columns outside the
+window are filtered. The acceptance tests below pass: every window of
+random tilings equals `slice_tiles` of the whole burn, record for
+record (`tests/burn_window.rs`).
+
+The cost of exactness is that a polygon's whole boundary is walked for
+every window it meets. Measured on the dev VM, one thread, against
+burning each tile's batch onto the tile's own `GridSpec` (both
+including the same comparison):
+
+| input | mode | tile | tiles | own `GridSpec` | `burn_window` |
+|---|---|---|---|---|---|
+| rock outcrops, 1024 m | coverage | 64 | 640 | 0.15 s | 0.16 s |
+| rock outcrops, 256 m | coverage | 128 | 1,591 | 0.46 s | 0.54 s |
+| rock outcrops, 256 m | approx | 128 | 1,578 | 0.13 s | 0.13 s |
+| rects | coverage | 64 | 176 | 0.12 s | 0.19 s |
+| coast-1e5 (one ring) | coverage | 256 | 177 | 2.0 s | 72 s |
+| seams (points on nodes, lines along walls) | coverage | 64 | 7,560 | 15.5 s, 2,736 tiles wrong | 83 s, all exact |
+
+So for the geometries routing by footprint sends to per-tile burning
+(small next to the tile) the window burn costs about what the tile's own
+grid does; a large polygon goes to burn once and slice anyway. A lattice
+view of the whole burn's sub-grid, walking only the window plus padding,
+could remove the large-polygon cost, but the boundary sums that feed
+some fractions (the Green's-theorem `left` term) would no longer be
+summed cell by cell as in the whole burn, so it would not be bit-exact
+by construction.
 
 ```rust
 /// Burn `geoms` onto the window `rows` x `cols` of `grid`: the same
@@ -219,7 +257,6 @@ burns, never a wrong answer.
   (`design/grid-frontends.md`), so everything here applies after the
   front end's transform. A front end that folds columns back (periodic
   or tripolar grids) re-merges records after the fold, by the rule
-  `burn` uses for multi-part geometries (`merge_cells`, in the pending
-  API changes for 0.3.0).
+  `burn` uses for multi-part geometries (`merge_cells`).
 - **Writing the tiles** (Zarr, COG), and how chunk boundaries line up
   with the tiles. A tile here can be any rectangle of whole cells.

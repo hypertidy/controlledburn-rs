@@ -8,6 +8,24 @@
   `coverage()`, `approx()`, `parity()` and the `with_*` methods (the
   fields can still be read and set); a `match` on either error needs a
   `_` arm.
+- **`burn_window`: a burn onto a window of the grid**, rows by columns,
+  with the records `burn` gives in those cells, the same values in the
+  same order and the full grid's indices, so each tile of a tiling can
+  burn just the geometries that meet it (`design/tile-parallel.md`). It
+  keeps the full grid's lattice and edge rules: a point on a seam lands
+  in one window, and a line on a wall stays in the whole burn's cell,
+  which burning onto each tile's own `GridSpec` does not give. Exact by
+  construction: a polygon is burned on the sub-grid the whole burn uses,
+  sweeping only the window's rows, and a line is walked along its parts
+  near the window, each started at a vertex clear of every wall. Two
+  property tests check every window of random tilings against
+  `slice_tiles` of the whole burn, record for record (both modes,
+  coalescing and part merging on and off, lattice-aligned rectangles,
+  lines along walls and points on corners, grid origins up to 1e7). A
+  window costs about the vertices of the geometries that meet it; a
+  polygon much larger than the window is walked whole for every window
+  it meets (coast-1e5 over 177 tiles: 72 s, against 2 s on per-tile
+  grids), so burn those once and slice.
 - **`merge_cells`: one record per cell and id for a whole result**, by
   the rule `burn` uses for multi-part geometries. For records that come
   together after a burn, such as a curvilinear or periodic front end

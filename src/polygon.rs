@@ -6,6 +6,8 @@
 //! with its own sub-grid and winding sweep, so winding from one disjoint
 //! component never bleeds into another's boundary cells.
 
+use std::ops::Range;
+
 use crate::coverage::{analytical_covered_fraction, closed_ring_covered_fraction};
 use crate::ee::bbox::BBox;
 use crate::geometry::{is_ccw, Coord, Polygon};
@@ -143,6 +145,7 @@ fn walk_ring(
     sub_rows: usize,
     sub_cols: usize,
     col_off: usize,
+    keep: &Range<usize>,
 ) -> Result<(), String> {
     if coords.len() < 4 {
         return Ok(());
@@ -169,7 +172,7 @@ fn walk_ring(
     // the heights of the cells left of it in that row). See `green_fraction`.
     let left_dy = rows_cleared(left_dy, sub_rows);
     for cr in &cells.records {
-        if cr.row < 1 || cr.row > sub_rows {
+        if cr.row < 1 || cr.row > sub_rows || !keep.contains(&(cr.row - 1)) {
             continue;
         }
         let dy: f64 = cr
@@ -200,7 +203,8 @@ fn walk_ring(
             continue;
         }
         let sub_r = r - 1;
-        if sub_r >= sub_rows {
+        // rows are independent from here on: a window's rows only
+        if sub_r >= sub_rows || !keep.contains(&sub_r) {
             continue;
         }
         // Padding COLUMNS still carry winding deltas for their row (an
@@ -320,6 +324,7 @@ pub(crate) fn process_polygon(
     runs: &mut Vec<GridRun>,
     edges: &mut Vec<GridEdge>,
     sc: &mut CoverageScratch,
+    window: Option<(&Range<usize>, &Range<usize>)>,
 ) -> Result<(), String> {
     let Some(exterior) = poly.rings.first() else { return Ok(()) };
     if exterior.len() < 4 {
@@ -348,6 +353,22 @@ pub(crate) fn process_polygon(
     let row_off = ((full_grid.ymax() - subgrid_bounded.ymax()) / dy).round() as usize;
     let col_off = ((subgrid_bounded.xmin() - full_grid.xmin()) / dx).round() as usize;
 
+    // A window (rows, cols of the full grid) keeps the sub-grid the whole
+    // burn uses, so the walk, the snap and the fractions are its own, and
+    // sweeps only the window's rows; the caller cuts the columns.
+    let keep = match window {
+        None => 0..sub_rows,
+        Some((rows, cols)) => {
+            if cols.end <= col_off || cols.start >= col_off + sub_cols {
+                return Ok(());
+            }
+            rows.start.saturating_sub(row_off).min(sub_rows)..rows.end.saturating_sub(row_off).min(sub_rows)
+        }
+    };
+    if keep.is_empty() {
+        return Ok(());
+    }
+
     rows_cleared(&mut sc.row_data, sub_rows);
     let n_rings = poly.rings.len();
 
@@ -355,7 +376,7 @@ pub(crate) fn process_polygon(
         if ring.len() < 4 {
             continue;
         }
-        walk_ring(ring, is_ccw(ring), r as u32, &subgrid, sc, sub_rows, sub_cols, col_off)?;
+        walk_ring(ring, is_ccw(ring), r as u32, &subgrid, sc, sub_rows, sub_cols, col_off, &keep)?;
     }
     let CoverageScratch { row_data, merged, ring_winding, touched, through, spans, .. } = sc;
 
@@ -378,7 +399,7 @@ pub(crate) fn process_polygon(
         }
     };
 
-    for (sr, row_vec) in row_data[..sub_rows].iter_mut().enumerate() {
+    for (sr, row_vec) in row_data[..sub_rows].iter_mut().enumerate().take(keep.end).skip(keep.start) {
         if row_vec.is_empty() {
             continue;
         }

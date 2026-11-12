@@ -118,8 +118,10 @@ mod tests {
 
     #[test]
     fn a_sum_within_tolerance_of_one_is_a_full_cell() {
-        let mut r = BurnResult::default();
-        r.edges = vec![e(0, 3, 0.5, 1), e(0, 3, 0.4999995, 1), e(0, 4, 0.5, 1), e(0, 4, 0.499, 1)];
+        let mut r = BurnResult {
+            edges: vec![e(0, 3, 0.5, 1), e(0, 3, 0.4999995, 1), e(0, 4, 0.5, 1), e(0, 4, 0.499, 1)],
+            ..Default::default()
+        };
         merge_cells(&mut r);
         assert_eq!(r.runs, vec![GridRun { row: 0, col_start: 3, col_end: 4, id: 1 }]);
         assert_eq!(r.edges.len(), 1);
@@ -130,17 +132,19 @@ mod tests {
     fn folded_pieces_make_one_record_per_cell_and_id() {
         // a geometry's run and edges folded onto cells it already has,
         // beside another id's records in the same cells
-        let mut r = BurnResult::default();
-        r.runs = vec![
-            GridRun { row: 1, col_start: 0, col_end: 3, id: 0 },
-            GridRun { row: 1, col_start: 2, col_end: 5, id: 0 },
-        ];
-        r.edges = vec![e(1, 4, 0.3, 0), e(1, 5, 0.3, 0), e(1, 5, 0.2, 0), e(1, 5, 0.6, 1)];
-        r.lines = vec![
-            GridLine { row: 2, col: 2, length: 0.5, id: 3 },
-            GridLine { row: 2, col: 2, length: 0.25, id: 3 },
-            GridLine { row: 2, col: 2, length: 1.0, id: 4 },
-        ];
+        let mut r = BurnResult {
+            runs: vec![
+                GridRun { row: 1, col_start: 0, col_end: 3, id: 0 },
+                GridRun { row: 1, col_start: 2, col_end: 5, id: 0 },
+            ],
+            edges: vec![e(1, 4, 0.3, 0), e(1, 5, 0.3, 0), e(1, 5, 0.2, 0), e(1, 5, 0.6, 1)],
+            lines: vec![
+                GridLine { row: 2, col: 2, length: 0.5, id: 3 },
+                GridLine { row: 2, col: 2, length: 0.25, id: 3 },
+                GridLine { row: 2, col: 2, length: 1.0, id: 4 },
+            ],
+            ..Default::default()
+        };
         merge_cells(&mut r);
         assert_eq!(r.runs, vec![GridRun { row: 1, col_start: 0, col_end: 5, id: 0 }]);
         assert_eq!(r.edges, vec![e(1, 5, 0.5, 0), e(1, 5, 0.6, 1)]);

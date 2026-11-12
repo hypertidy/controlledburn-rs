@@ -100,7 +100,7 @@ mod walker;
 mod window;
 mod wkb;
 
-pub use burn::{burn, burn_wkb, BurnMode, BurnOptions};
+pub use burn::{burn, burn_window, burn_wkb, BurnMode, BurnOptions};
 pub use coalesce::coalesce_runs;
 pub use crop::crop;
 pub use error::{BurnError, WkbError};

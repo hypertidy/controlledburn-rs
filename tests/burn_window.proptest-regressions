@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc c7bcd3d9689dec7ccbada1ef4470a921ada8115609fde5ff0361532bb5c68ba1 # shrinks to cx = 0.0, cy = 0.0, r = 0.5, k = 3, wobble = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], c = [4, 0, 0, 5], tc = 2, tr = 3, approx = false, coalesce = false, merge = false
+cc fbbcdde7b9870aea32001e099174ea12cac1eb2d378d05a2e3a73110a71be58a # shrinks to cx = 0.0, cy = 6.906888970051439, r = 6.399672028649702, k = 9, wobble = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6471411355302067, 0.0, 0.0, 0.0, 0.0], c = [0, 0, 0, 0], tc = 1, tr = 1, approx = false, coalesce = false, merge = false, o = (0.0, 6066130.496434703)
+cc 4e5ee8b570659f10238688e57152021f925d17ae937c30814c17326245804501 # shrinks to cx = 0.0, cy = 0.0, r = 0.5, k = 3, wobble = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], c = [0, 0, 0, 0], tc = 1, tr = 1, approx = true, coalesce = false, merge = false, o = (0.0, 0.0)
