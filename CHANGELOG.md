@@ -8,6 +8,19 @@
   `coverage()`, `approx()`, `parity()` and the `with_*` methods (the
   fields can still be read and set); a `match` on either error needs a
   `_` arm.
+- **Feature `geo-traits`: input from any `geo_traits::GeometryTrait`**
+  (geo-types, the `wkb` crate's zero-copy reader, GeoArrow arrays):
+  `burn_geo_traits` burns a sequence of them with ids by position, as
+  `burn_wkb` does, and `Geometry::from_geo_traits` converts one. Only
+  `x` and `y` are read; an empty point is NaN, as `POINT EMPTY`; `Rect`
+  and `Triangle` become the polygons geo-types' `to_polygon` gives; a
+  `GeometryCollection` is refused (skipped with a note when burning).
+  Tests check it against `burn_wkb` through the `wkb` reader on all 64
+  WKB fixtures (both modes, merging on and off), and against the
+  `geo-types` conversion for random geometries of every type. The
+  feature needs Rust 1.75; without it the crate still builds on 1.70.
+  `GeometryCollectionError` moved to the crate root (still re-exported
+  from `geo`).
 - **`burn_window`: a burn onto a window of the grid**, rows by columns,
   with the records `burn` gives in those cells, the same values in the
   same order and the full grid's indices, so each tile of a tiling can
