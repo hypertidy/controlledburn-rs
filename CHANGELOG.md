@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Breaking: `MaterializeOptions`, `PixelFn` and `EdgePolicy` are
+  `#[non_exhaustive]`,** like `BurnOptions`, so later versions can add
+  options, reductions and policies without another break. Build options
+  with `MaterializeOptions::new(fn_, edge_policy)` or `default()` and
+  `with_fn`, `with_edge_policy`, `with_threshold`; the fields can still
+  be read and set. A `match` on `PixelFn` or `EdgePolicy` outside the
+  crate needs a `_` arm.
 - **Docs reviewed for 0.3.0.** The README and crate docs no longer
   describe the crate as regular-grid only: they say the engine works on
   a regular lattice and other grids go through index space (a Grids

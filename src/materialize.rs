@@ -16,8 +16,10 @@ use crate::error::BurnError;
 use crate::output::BurnResult;
 
 /// Reduction applied when several geometries touch one pixel.
+/// Non-exhaustive: a later version may add reductions.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub enum PixelFn {
     /// Keep the first value written.
     First,
@@ -33,8 +35,11 @@ pub enum PixelFn {
     Any,
 }
 
+/// How a boundary cell's coverage fraction is applied.
+/// Non-exhaustive: a later version may add policies.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub enum EdgePolicy {
     /// value * coverage fraction, combined per `PixelFn`.
     Fraction,
@@ -43,12 +48,44 @@ pub enum EdgePolicy {
     Threshold,
 }
 
+/// Options for materializing a burn into a dense buffer. Build one from
+/// [`MaterializeOptions::default`] or [`MaterializeOptions::new`] and the
+/// `with_*` methods. The fields can be read and set, but the struct is
+/// non-exhaustive, so it can't be written as a literal outside this
+/// crate: a later version may add options without breaking callers.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
 pub struct MaterializeOptions {
+    /// Reduction when several geometries touch a pixel (default `Last`).
     pub fn_: PixelFn,
+    /// How boundary cells are applied (default `Threshold`).
     pub edge_policy: EdgePolicy,
+    /// Coverage at or above which a boundary cell counts, under
+    /// `EdgePolicy::Threshold` (default 0.5).
     pub threshold: f64,
+}
+
+impl MaterializeOptions {
+    /// The given reduction and edge policy, threshold 0.5.
+    pub fn new(fn_: PixelFn, edge_policy: EdgePolicy) -> Self {
+        MaterializeOptions { fn_, edge_policy, threshold: 0.5 }
+    }
+
+    pub fn with_fn(mut self, fn_: PixelFn) -> Self {
+        self.fn_ = fn_;
+        self
+    }
+
+    pub fn with_edge_policy(mut self, edge_policy: EdgePolicy) -> Self {
+        self.edge_policy = edge_policy;
+        self
+    }
+
+    pub fn with_threshold(mut self, threshold: f64) -> Self {
+        self.threshold = threshold;
+        self
+    }
 }
 
 impl Default for MaterializeOptions {

@@ -25,7 +25,7 @@ fn ring(cx: f64, cy: f64, r: f64, k: usize, wobble: &[f64]) -> Vec<Coord> {
 
 fn dense(r: &BurnResult, ncol: u32, nrow: u32, fn_: PixelFn, edge_policy: EdgePolicy) -> Vec<f64> {
     let mut buf = vec![f64::NAN; (ncol * nrow) as usize];
-    let opts = MaterializeOptions { fn_, edge_policy, threshold: 0.5 };
+    let opts = MaterializeOptions::new(fn_, edge_policy);
     materialize(r, &mut buf, ncol, nrow, None, &opts).unwrap();
     buf
 }

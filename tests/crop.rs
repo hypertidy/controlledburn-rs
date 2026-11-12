@@ -8,7 +8,7 @@ use proptest::prelude::*;
 
 fn dense(r: &BurnResult, ncol: u32, nrow: u32) -> Vec<f64> {
     let mut buf = vec![0.0; (ncol * nrow) as usize];
-    let opts = MaterializeOptions { fn_: PixelFn::Sum, edge_policy: EdgePolicy::Fraction, threshold: 0.5 };
+    let opts = MaterializeOptions::new(PixelFn::Sum, EdgePolicy::Fraction);
     materialize(r, &mut buf, ncol, nrow, None, &opts).unwrap();
     buf
 }
