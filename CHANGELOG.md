@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-11-12)
+
+Moving from 0.2: `BurnOptions`, `MaterializeOptions`, `PixelFn`,
+`EdgePolicy`, `BurnError` and `WkbError` are `#[non_exhaustive]` (build
+options with the constructors and `with_*` methods; a `match` needs a
+`_` arm). The records change for multi-part geometries, which now get
+one record per cell (`merge_parts`, on by default);
+`BurnOptions::parity` still gives the C++ core's records. Edge
+fractions stay `f32`.
 
 - **Breaking: `MaterializeOptions`, `PixelFn` and `EdgePolicy` are
   `#[non_exhaustive]`,** like `BurnOptions`, so later versions can add
