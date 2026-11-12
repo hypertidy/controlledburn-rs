@@ -24,6 +24,10 @@ pub struct GridRun {
 
 /// A single polygon-boundary cell. `fraction` is the dimensionless
 /// coverage fraction in (0, 1): area(polygon intersect cell) / area(cell).
+///
+/// `fraction` is computed in `f64` and stored as `f32`, good to about 6e-8
+/// of the cell; this keeps the record at 16 bytes. For `f64` fractions over
+/// a window use [`CoverageWindow`](crate::CoverageWindow).
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

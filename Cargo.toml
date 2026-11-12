@@ -1,10 +1,10 @@
 [package]
 name = "controlledburn"
-version = "0.2.4"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.70"
 license = "Apache-2.0"
-description = "Sparse scanline rasterization of polygons, lines and points with exact coverage fractions. Pure Rust port of the controlledburn C++ core."
+description = "Sparse scanline rasterization of polygons, lines and points with exact coverage fractions, in pure Rust. Record-for-record compatible with the controlledburn C++ core."
 repository = "https://github.com/hypertidy/controlledburn-rs"
 keywords = ["raster", "rasterize", "gis", "geospatial", "polygon"]
 categories = ["science::geo", "algorithms"]
@@ -12,6 +12,7 @@ readme = "README.md"
 exclude = [
     ".github/",
     "book/",
+    "design/img/",
     "examples/",
     "rustfmt.toml",
     ".gitignore",
