@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="770" height="280" viewBox="0 0 770 280">
+<rect x="0.00" y="0.00" width="770.00" height="280.00" fill="#ffffff"/>
+<rect x="340.00" y="30.00" width="30.00" height="30.00" fill="#ebf2fb"/>
+<rect x="100.00" y="60.00" width="30.00" height="30.00" fill="#73a6e4"/>
+<rect x="130.00" y="60.00" width="30.00" height="30.00" fill="#f8fbfe"/>
+<rect x="310.00" y="60.00" width="30.00" height="30.00" fill="#81afe7"/>
+<rect x="340.00" y="60.00" width="30.00" height="30.00" fill="#b6d1f1"/>
+<rect x="70.00" y="90.00" width="30.00" height="30.00" fill="#d7e6f7"/>
+<rect x="100.00" y="90.00" width="30.00" height="30.00" fill="#7aabe5"/>
+<rect x="130.00" y="90.00" width="30.00" height="30.00" fill="#3780d9"/>
+<rect x="280.00" y="90.00" width="30.00" height="30.00" fill="#9bc0ec"/>
+<rect x="310.00" y="90.00" width="30.00" height="30.00" fill="#9bc0ec"/>
+<rect x="70.00" y="120.00" width="30.00" height="30.00" fill="#5291de"/>
+<rect x="130.00" y="120.00" width="30.00" height="30.00" fill="#e4eefa"/>
+<rect x="160.00" y="120.00" width="30.00" height="30.00" fill="#5291de"/>
+<rect x="250.00" y="120.00" width="30.00" height="30.00" fill="#b6d1f1"/>
+<rect x="280.00" y="120.00" width="30.00" height="30.00" fill="#81afe7"/>
+<rect x="40.00" y="150.00" width="30.00" height="30.00" fill="#a2c4ed"/>
+<rect x="70.00" y="150.00" width="30.00" height="30.00" fill="#afccf0"/>
+<rect x="160.00" y="150.00" width="30.00" height="30.00" fill="#c3d9f3"/>
+<rect x="190.00" y="150.00" width="30.00" height="30.00" fill="#73a6e4"/>
+<rect x="220.00" y="150.00" width="30.00" height="30.00" fill="#d7e6f7"/>
+<rect x="250.00" y="150.00" width="30.00" height="30.00" fill="#5f9ae0"/>
+<rect x="40.00" y="180.00" width="30.00" height="30.00" fill="#5291de"/>
+<rect x="190.00" y="180.00" width="30.00" height="30.00" fill="#a2c4ed"/>
+<rect x="220.00" y="180.00" width="30.00" height="30.00" fill="#4589db"/>
+<rect x="10.00" y="210.00" width="30.00" height="30.00" fill="#87b3e8"/>
+<rect x="40.00" y="210.00" width="30.00" height="30.00" fill="#ebf2fb"/>
+<line x1="10.00" y1="30.00" x2="10.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="40.00" y1="30.00" x2="40.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="70.00" y1="30.00" x2="70.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="100.00" y1="30.00" x2="100.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="130.00" y1="30.00" x2="130.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="160.00" y1="30.00" x2="160.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="190.00" y1="30.00" x2="190.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="220.00" y1="30.00" x2="220.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="250.00" y1="30.00" x2="250.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="280.00" y1="30.00" x2="280.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="310.00" y1="30.00" x2="310.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="340.00" y1="30.00" x2="340.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="370.00" y1="30.00" x2="370.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="30.00" x2="370.00" y2="30.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="60.00" x2="370.00" y2="60.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="90.00" x2="370.00" y2="90.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="120.00" x2="370.00" y2="120.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="150.00" x2="370.00" y2="150.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="180.00" x2="370.00" y2="180.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="210.00" x2="370.00" y2="210.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="240.00" x2="370.00" y2="240.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="270.00" x2="370.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="28.00" y1="234.00" x2="121.00" y2="78.00" stroke="#333333" stroke-width="2"/>
+<line x1="121.00" y1="78.00" x2="226.00" y2="201.00" stroke="#333333" stroke-width="2"/>
+<line x1="226.00" y1="201.00" x2="352.00" y2="57.00" stroke="#333333" stroke-width="2"/>
+<rect x="10.00" y="30.00" width="360.00" height="240.00" fill="none" stroke="#777777" stroke-width="1"/>
+<text x="10.00" y="20.00" font-size="14" text-anchor="start" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">a line: 26 records, length in each cell</text>
+<rect x="430.00" y="60.00" width="30.00" height="30.00" fill="#e0ab89"/>
+<rect x="490.00" y="180.00" width="30.00" height="30.00" fill="#e0ab89"/>
+<rect x="490.00" y="180.00" width="30.00" height="30.00" fill="#e0ab89"/>
+<rect x="580.00" y="60.00" width="30.00" height="30.00" fill="#e0ab89"/>
+<rect x="640.00" y="210.00" width="30.00" height="30.00" fill="#e0ab89"/>
+<rect x="700.00" y="120.00" width="30.00" height="30.00" fill="#e0ab89"/>
+<line x1="400.00" y1="30.00" x2="400.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="430.00" y1="30.00" x2="430.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="460.00" y1="30.00" x2="460.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="490.00" y1="30.00" x2="490.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="520.00" y1="30.00" x2="520.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="550.00" y1="30.00" x2="550.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="580.00" y1="30.00" x2="580.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="610.00" y1="30.00" x2="610.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="640.00" y1="30.00" x2="640.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="670.00" y1="30.00" x2="670.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="700.00" y1="30.00" x2="700.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="730.00" y1="30.00" x2="730.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="760.00" y1="30.00" x2="760.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="400.00" y1="30.00" x2="760.00" y2="30.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="400.00" y1="60.00" x2="760.00" y2="60.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="400.00" y1="90.00" x2="760.00" y2="90.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="400.00" y1="120.00" x2="760.00" y2="120.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="400.00" y1="150.00" x2="760.00" y2="150.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="400.00" y1="180.00" x2="760.00" y2="180.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="400.00" y1="210.00" x2="760.00" y2="210.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="400.00" y1="240.00" x2="760.00" y2="240.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="400.00" y1="270.00" x2="760.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<circle cx="445.00" cy="75.00" r="4.5" fill="#333333" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="496.00" cy="189.00" r="4.5" fill="#333333" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="514.00" cy="204.00" r="4.5" fill="#333333" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="592.00" cy="72.00" r="4.5" fill="#333333" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="661.00" cy="228.00" r="4.5" fill="#333333" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="706.00" cy="126.00" r="4.5" fill="#333333" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="400.00" y="30.00" width="360.00" height="240.00" fill="none" stroke="#777777" stroke-width="1"/>
+<text x="400.00" y="20.00" font-size="14" text-anchor="start" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">6 points: 6 records, one per point</text>
+</svg>

@@ -43,7 +43,6 @@ all-features = true
 # can be an ulp off, and lattice cases are decided by single ulps)
 serde_json = { version = "1", features = ["float_roundtrip"] }
 proptest = "1"
-plotters = { version = "0.3", default-features = false, features = ["bitmap_backend", "bitmap_encoder"] }
 criterion = { version = "0.5", default-features = false }
 geo = "0.31"
 geo-types = "0.7"

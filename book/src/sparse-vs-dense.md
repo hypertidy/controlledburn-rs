@@ -67,7 +67,7 @@ assert!((land - 0.3316).abs() < 0.001);
 173 KB against 518 KB for a dense `f64` array. At this resolution the
 gain is modest, because nearly every land cell is a boundary cell.
 
-![The world at one degree, cells shaded by coverage fraction](img/world-1deg.png)
+![The world at one degree, cells shaded by coverage fraction](img/world-1deg.svg)
 
 ## Finer grids
 

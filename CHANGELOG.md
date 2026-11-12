@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **The book has figures.** `examples/render_figures.rs` is rewritten to
+  write SVG by hand (no dependencies; `plotters` is gone from the
+  dev-dependencies) and draws eight figures from real burns: the
+  contract's square with its fractions, a multi-part geometry with
+  `merge_parts` off and on, a rotated grid in index and world space,
+  the world at one degree, coverage against approx on Britain and
+  Ireland, a line and points, a cropped tile, and one tile of the world
+  materialized. The three chapters marked "coming in a later revision"
+  (coverage versus approx, lines and points, materialize) are written,
+  with their numbers asserted; a new chapter, "Grids beyond the
+  lattice", shows burning in index space with a tested rotated-grid
+  example. The old PNGs, four of them unused and the renderer's own code
+  still on 1-based indices, are removed.
+
 ## 0.3.0 (2026-11-12)
 
 Moving from 0.2: `BurnOptions`, `MaterializeOptions`, `PixelFn`,

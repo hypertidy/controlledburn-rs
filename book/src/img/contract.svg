@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="450" height="460" viewBox="0 0 450 460">
+<rect x="0.00" y="0.00" width="450.00" height="460.00" fill="#ffffff"/>
+<path fill="#c8692d" d="M150,110h120v40h-120zM150,150h120v40h-120zM150,190h120v40h-120z"/>
+<path fill="#e4b496" d="M150,70h120v40h-120zM110,110h40v40h-40zM270,110h40v40h-40zM110,150h40v40h-40zM270,150h40v40h-40zM110,190h40v40h-40zM270,190h40v40h-40zM150,230h120v40h-120z"/>
+<path fill="#f1dacb" d="M110,70h40v40h-40zM270,70h40v40h-40zM110,230h40v40h-40zM270,230h40v40h-40z"/>
+<line x1="30.00" y1="30.00" x2="30.00" y2="430.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="70.00" y1="30.00" x2="70.00" y2="430.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="110.00" y1="30.00" x2="110.00" y2="430.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="150.00" y1="30.00" x2="150.00" y2="430.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="190.00" y1="30.00" x2="190.00" y2="430.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="230.00" y1="30.00" x2="230.00" y2="430.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="270.00" y1="30.00" x2="270.00" y2="430.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="310.00" y1="30.00" x2="310.00" y2="430.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="350.00" y1="30.00" x2="350.00" y2="430.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="390.00" y1="30.00" x2="390.00" y2="430.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="430.00" y1="30.00" x2="430.00" y2="430.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="30.00" y1="30.00" x2="430.00" y2="30.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="30.00" y1="70.00" x2="430.00" y2="70.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="30.00" y1="110.00" x2="430.00" y2="110.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="30.00" y1="150.00" x2="430.00" y2="150.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="30.00" y1="190.00" x2="430.00" y2="190.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="30.00" y1="230.00" x2="430.00" y2="230.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="30.00" y1="270.00" x2="430.00" y2="270.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="30.00" y1="310.00" x2="430.00" y2="310.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="30.00" y1="350.00" x2="430.00" y2="350.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="30.00" y1="390.00" x2="430.00" y2="390.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="30.00" y1="430.00" x2="430.00" y2="430.00" stroke="#d4d4d4" stroke-width="1"/>
+<clipPath id="c1"><rect x="30.00" y="30.00" width="400.00" height="400.00"/></clipPath>
+<path d="M130.0,250.0L290.0,250.0L290.0,90.0L130.0,90.0L130.0,250.0Z" fill="none" fill-rule="evenodd" stroke="#333333" stroke-width="2" stroke-linejoin="round" clip-path="url(#c1)"/>
+<text x="138.80" y="102.80" font-size="10" text-anchor="middle" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">.25</text>
+<text x="178.80" y="102.80" font-size="10" text-anchor="middle" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">.50</text>
+<text x="210.00" y="102.80" font-size="10" text-anchor="middle" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">.50</text>
+<text x="241.20" y="102.80" font-size="10" text-anchor="middle" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">.50</text>
+<text x="281.20" y="102.80" font-size="10" text-anchor="middle" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">.25</text>
+<text x="138.80" y="142.80" font-size="10" text-anchor="middle" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">.50</text>
+<text x="281.20" y="142.80" font-size="10" text-anchor="middle" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">.50</text>
+<text x="138.80" y="174.00" font-size="10" text-anchor="middle" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">.50</text>
+<text x="281.20" y="174.00" font-size="10" text-anchor="middle" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">.50</text>
+<text x="138.80" y="205.20" font-size="10" text-anchor="middle" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">.50</text>
+<text x="281.20" y="205.20" font-size="10" text-anchor="middle" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">.50</text>
+<text x="138.80" y="245.20" font-size="10" text-anchor="middle" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">.25</text>
+<text x="178.80" y="245.20" font-size="10" text-anchor="middle" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">.50</text>
+<text x="210.00" y="245.20" font-size="10" text-anchor="middle" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">.50</text>
+<text x="241.20" y="245.20" font-size="10" text-anchor="middle" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">.50</text>
+<text x="281.20" y="245.20" font-size="10" text-anchor="middle" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">.25</text>
+<text x="50.00" y="22.00" font-size="11" text-anchor="middle" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">0</text>
+<text x="22.00" y="54.00" font-size="11" text-anchor="end" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">0</text>
+<text x="90.00" y="22.00" font-size="11" text-anchor="middle" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">1</text>
+<text x="22.00" y="94.00" font-size="11" text-anchor="end" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">1</text>
+<text x="130.00" y="22.00" font-size="11" text-anchor="middle" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">2</text>
+<text x="22.00" y="134.00" font-size="11" text-anchor="end" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">2</text>
+<text x="170.00" y="22.00" font-size="11" text-anchor="middle" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">3</text>
+<text x="22.00" y="174.00" font-size="11" text-anchor="end" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">3</text>
+<text x="210.00" y="22.00" font-size="11" text-anchor="middle" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">4</text>
+<text x="22.00" y="214.00" font-size="11" text-anchor="end" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">4</text>
+<text x="250.00" y="22.00" font-size="11" text-anchor="middle" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">5</text>
+<text x="22.00" y="254.00" font-size="11" text-anchor="end" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">5</text>
+<text x="290.00" y="22.00" font-size="11" text-anchor="middle" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">6</text>
+<text x="22.00" y="294.00" font-size="11" text-anchor="end" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">6</text>
+<text x="330.00" y="22.00" font-size="11" text-anchor="middle" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">7</text>
+<text x="22.00" y="334.00" font-size="11" text-anchor="end" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">7</text>
+<text x="370.00" y="22.00" font-size="11" text-anchor="middle" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">8</text>
+<text x="22.00" y="374.00" font-size="11" text-anchor="end" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">8</text>
+<text x="410.00" y="22.00" font-size="11" text-anchor="middle" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">9</text>
+<text x="22.00" y="414.00" font-size="11" text-anchor="end" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">9</text>
+<text x="230.00" y="452.00" font-size="11" text-anchor="middle" fill="#777777" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">col</text>
+</svg>

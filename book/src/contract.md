@@ -78,7 +78,7 @@ of a [later chapter](lines-and-points.md). `notes` is empty too: it
 carries per-geometry problems (unparseable WKB, non-finite coordinates,
 rings or lines too short to burn) that do not stop the burn.
 
-![The square on the grid: runs shaded solid, edges shaded by fraction](img/contract.png)
+![The square on the grid: runs shaded solid, edges shaded and labelled with their fraction](img/contract.svg)
 
 ## The invariant
 
@@ -112,6 +112,37 @@ let r = burn(&[Geometry::Polygon(Polygon::new(vec![ring]))], &grid, BurnOptions:
 let burned = r.covered_cells() * grid.dx() * grid.dy();
 assert!((burned - exact).abs() / exact < 1e-5, "{burned} vs {exact}");
 ```
+
+## Multi-part geometries
+
+A multi-polygon gets one record per cell, as if it were one polygon
+(`merge_parts`, on by default). Where two parts meet inside a cell, their
+fractions are added, and two halves make a whole cell, so the cell
+becomes part of a run. With `merge_parts` off each part keeps its own
+records, which is what the C++ core gives:
+
+![Two rectangles meeting mid-cell: with merge_parts off the shared column has two records per cell, with it on, one](img/merge-parts.svg)
+
+```rust
+# extern crate controlledburn;
+use controlledburn::{burn, BurnOptions, Coord, Geometry, GridSpec, Polygon};
+
+let rect = |x0: f64, x1: f64| Polygon::new(vec![vec![
+    Coord::new(x0, 0.6), Coord::new(x1, 0.6), Coord::new(x1, 3.4), Coord::new(x0, 3.4), Coord::new(x0, 0.6),
+]]);
+let g = Geometry::MultiPolygon(vec![rect(1.3, 4.5), rect(4.5, 7.7)]);
+let grid = GridSpec::new(0.0, 0.0, 9.0, 4.0, 9, 4);
+
+let off = burn(std::slice::from_ref(&g), &grid, BurnOptions::default().with_merge_parts(false)).unwrap();
+let on = burn(std::slice::from_ref(&g), &grid, BurnOptions::default()).unwrap();
+assert_eq!(off.runs.len() + off.edges.len(), 28);
+assert_eq!(on.runs.len() + on.edges.len(), 20);
+assert!((on.covered_cells() - off.covered_cells()).abs() < 1e-5);
+```
+
+Parts are added, not unioned: parts that overlap are capped at a full
+cell, but the overlap is not subtracted from a partial one.
+`BurnOptions::parity` turns merging off along with run coalescing.
 
 ## What the tables are
 
