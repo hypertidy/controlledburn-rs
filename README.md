@@ -1,14 +1,22 @@
 # controlledburn
 
-Sparse scanline rasterization of polygons, lines and points onto a
-regular grid, with exact coverage fractions for polygon boundary cells.
-O(perimeter) in time and memory: no pixel buffer is ever materialized by
-the burn itself.
+Sparse scanline rasterization of polygons, lines and points, with exact
+coverage fractions for polygon boundary cells. O(perimeter) in time and
+memory: no pixel buffer is ever materialized by the burn itself.
+
+The engine burns onto a regular lattice (`GridSpec`: an extent and a
+column and row count). Other grids are reached through index space: map
+each vertex to fractional `(col, row)` and burn on a lattice of unit
+cells, and the records are already in the original grid's `(row, col)`.
+That is exact for rotated and sheared (affine) grids, for rectilinear
+grids once edges are cut at the cell walls, and for curvilinear grids
+with equal-area cells; see [Grids](#grids) below.
 
 Pure Rust port of the C++ core of
-[controlledburn](https://github.com/hypertidy/controlledburn). No
-dependencies, no unsafe code, output bit-identical to the C++ (see
-Parity below).
+[controlledburn](https://github.com/hypertidy/controlledburn), and now
+its canonical implementation. No required dependencies, no unsafe code;
+with `BurnOptions::parity` the output is record-for-record identical to
+the C++ tables (see Parity below).
 
 - API reference: [docs.rs/controlledburn](https://docs.rs/controlledburn)
 - The book, with real data: [hypertidy.github.io/controlledburn-rs](https://hypertidy.github.io/controlledburn-rs/)
@@ -34,8 +42,19 @@ assert!((r.covered_cells() * grid.dx() * grid.dy() - 16.0).abs() < 1e-5);
 Indices are 0-based with row 0 at the top, run ranges are half-open,
 and geometry `k` in the input has `id = k` (`id_offset + k` with
 `BurnOptions::with_id_offset`). A multi-part geometry has one record per
-cell: parts crossing the same cell are summed. WKB input (ISO and EWKB,
-both byte orders, Z/M skipped) goes through `burn_wkb`.
+cell: parts crossing the same cell are summed.
+
+## What is in the crate
+
+| to | use |
+|---|---|
+| burn geometries | `burn` (the crate's `Geometry`), `burn_wkb` (ISO and EWKB, both byte orders, Z/M skipped), `burn_geo_traits` (feature `geo-traits`) |
+| burn on several threads | `burn_par` |
+| burn one window of the grid | `burn_window` |
+| cut a result into tiles | `slice_tiles`, `slice_tiles_par`; `crop` for one window |
+| make pixels | `materialize`, with fasterize-style pixel functions |
+| tidy records | `merge_cells` (one record per cell and id, after a fold or a concatenation), `coalesce_runs` |
+| exact coverage or integrals of small rings, dense | `CoverageWindow`, `RowPrefix`, `ring_area`, with `Measure` for cell areas (planar, or spherical on grids whose rows are parallels) |
 
 ## Modes
 
@@ -53,6 +72,32 @@ two rules interactively in the browser, on world countries and
 coastlines in several projections, along with what each costs to store
 in tiles; its "runs of whole cells plus a list of edge fractions" is
 this crate's runs and edges tables.
+
+## Grids
+
+`burn` works on a regular lattice in the grid's own coordinates. Every
+other grid is a front end outside the engine, which moves the geometry
+into index space and burns it on unit cells, `GridSpec::new(0.0, -h,
+w, 0.0, w, h)` with each vertex's row negated (`CoverageWindow` and
+`RowPrefix` take index space directly, y down):
+
+| grid | the front end | result |
+|---|---|---|
+| regular | none | exact |
+| rotated or sheared affine | inverse geotransform on the vertices | exact |
+| rectilinear (uneven 1D coordinates) | cut edges at cell walls, map each axis | exact |
+| curvilinear, equal-area cells | cut edges at cell sides and four spokes per cell | exact |
+| curvilinear, bilinear cells (GDAL geolocation) | densify, inverse lookup | close (about 1% of a cell on a polar sector) |
+
+Fractions are of index-space cells, so they are fractions of world area
+wherever the map keeps area ratios within a cell (all the exact rows).
+Periodic longitude and tripolar folds are unwrapped into a wider index
+space and folded back after, with `merge_cells` to restore one record
+per cell. The contract, the conventions and the measurements are in
+`design/grid-frontends.md`; the curvilinear front end lives in
+[rwarp](https://github.com/hypertidy/rwarp). For longitude/latitude
+grids, `Measure::cos_latitude` gives spherical cell areas to weight the
+fractions.
 
 ## Chunking
 
@@ -79,15 +124,15 @@ whole grid (`tests/tiles.rs`). `slice_tiles_par(&r, &grid, 256, 256,
 threads)` gives the same tiles using several threads (std only, no extra
 dependencies). On 8.4 M records it was 2-5x faster than `slice_tiles`
 at 8-32 threads. It uses at most one thread per 131,072 records, so a
-small output is sliced on the calling thread, where starting threads would
-cost more than they save. Its parallelism is by band of tile rows, so a
-grid only a few tiles tall gains little, and on 2 threads it is about
-even. Its peak memory depends on the allocator: with glibc's default
-per-thread arenas it was up to 1.7x the serial slice's after a parallel
-burn, and about the serial slice's plus one band index entry per record
-with `MALLOC_ARENA_MAX=1` (`design/slice-after-burn.md`). For a single window, or tile extents that
-are not a regular grid, use `crop`. It returns the same tables but scans
-the whole result on every call, so don't loop it over a tile grid.
+small output is sliced on the calling thread, and its parallelism is by
+band of tile rows, so a grid only a few tiles tall gains little. With
+glibc's default per-thread arenas its peak memory after a parallel burn
+was up to 1.7x the serial slice's; `MALLOC_ARENA_MAX=1` brings it to the
+serial slice's plus one band index entry per record
+(`design/slice-after-burn.md`). For a single window, or tile extents
+that are not a regular tiling, use `crop`. It returns the same tables
+but scans the whole result on every call, so don't loop it over a tile
+grid.
 
 - *Per tile*: `burn_window(&geoms, &grid, rows, cols, opts)` burns onto
   a window of the grid (full-grid indices; the same records as the whole
@@ -198,19 +243,27 @@ defined result for them.
 
 ## Performance
 
-200,000-vertex jittered ring, single core (`cargo bench`):
+200,000-vertex jittered ring, single core (`cargo bench`). The first two
+columns were measured together at the port (September 2026); the last
+is 0.3.0 on the development VM (AMD EPYC Milan), so compare it with the
+column beside it only roughly:
 
-| grid | mode | C++ core | this crate |
-|---|---|---|---|
-| 4096 x 4096 | Coverage | 3.23 s | 1.12 s |
-| 4096 x 4096 | Approx | 69 ms | 77 ms |
-| 1024 x 1024 | Coverage | 0.65 s | 0.23 s |
+| grid | mode | C++ core | this crate, at the port | this crate, 0.3.0 |
+|---|---|---|---|---|
+| 4096 x 4096 | Coverage | 3.23 s | 1.12 s | 0.97 s |
+| 4096 x 4096 | Approx | 69 ms | 77 ms | 65 ms |
+| 1024 x 1024 | Coverage | 0.65 s | 0.23 s | 0.18 s |
+| 1024 x 1024 | Approx | | | 23 ms |
 
-The Coverage-mode gain comes from data structures only (a hash-indexed
-cell list instead of `std::map`, push-and-merge instead of a per-row
-linear scan, a coordinate arena instead of one vector per traversal, and
-an O(k log k) chain search in the left-hand-area routine with the same
-tie-breaking); the arithmetic is unchanged.
+The Coverage-mode gain over the C++ core comes from data structures only
+(a hash-indexed cell list instead of `std::map`, push-and-merge instead
+of a per-row linear scan, a coordinate arena instead of one vector per
+traversal, and an O(k log k) chain search in the left-hand-area routine
+with the same tie-breaking); the arithmetic is unchanged. Since the port,
+scratch buffers are reused across geometries and a ring's traversals
+live in one linked array. Against burnscars, on REMA grids and SCAR rock
+outcrops, serial and on up to 128 threads, see
+[cb-compare](https://hypertidy.github.io/cb-compare/).
 
 ## License
 
