@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **`burn_wkb_par`: `burn_wkb` on several threads.** The same result as
+  `burn_wkb`, record for record and note for note, with each blob parsed
+  by the thread that burns it. cb-compare's Setonix run of 0.3.0 (job
+  52923373) found that parsing every blob first and calling `burn_par`
+  spends as much time building and freeing tens of thousands of owned
+  geometries as burning them: 2-11x slower than a parse-as-you-burn
+  split at 128 threads on the rock outcrops and small-1e5. Each blob's
+  work, for balancing, is read from the bytes without building the
+  geometry (the same 16 coordinates per part `burn_par` samples, tested
+  equal on both byte orders and with Z and M). `burn_par` and
+  `burn_wkb_par` share one chunking and thread core. On the dev VM at 32
+  threads, rock-32m approx: 17 ms, against 45 ms parsing first and 215 ms
+  serial; small-1e5 approx 62 ms against 126 ms.
+
 ## 0.3.1 (2026-11-12)
 
 Adds `relate_cells`, `CellRelation` and `IntersectionMatrix`: DE-9IM of

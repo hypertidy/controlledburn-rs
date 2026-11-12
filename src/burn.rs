@@ -549,18 +549,109 @@ fn burn_par_from(
     threads: usize,
     per_thread: usize,
 ) -> Result<BurnResult, BurnError> {
-    let threads = if threads == 0 { std::thread::available_parallelism().map_or(1, |n| n.get()) } else { threads };
     let cost: Vec<usize> = geoms.iter().map(|g| work(g, grid)).collect();
-    let total: usize = cost.iter().sum();
-    let threads = total.checked_div(per_thread).map_or(threads, |n| threads.min(n));
-    if threads < 2 || geoms.len() < 2 {
+    let Some(threads) = par_threads(&cost, threads, per_thread) else {
         return burn(geoms, grid, opts);
-    }
+    };
     grid.validate()?;
     opts.validate()?;
     opts.id(geoms.len() - 1)?;
+    Ok(par_chunks(&cost, grid, &opts, threads, |k, id, full_grid, out, sc| {
+        burn_one(&geoms[k], id, full_grid, grid, out, &opts, sc, None)
+    }))
+}
 
-    // Contiguous chunks of about equal work.
+/// [`burn_wkb`] on `threads` threads (0: all available): [`burn_par`] for
+/// WKB blobs, with the same result as `burn_wkb`, record for record and in
+/// the same order, notes included.
+///
+/// Each blob is parsed by the thread that burns it, as it burns it, so no
+/// parsed geometry outlives its burn and none crosses a thread. Parsing
+/// first and calling [`burn_par`] instead allocates every geometry at once
+/// and frees it afterwards, which for many small geometries can cost as
+/// much as the burn. The work of each blob, for balancing the threads, is
+/// read from it without building the geometry.
+///
+/// Chunking, the thread cap and the fallback to the calling thread are
+/// those of [`burn_par`]. The errors are those of [`burn_wkb`], with ids
+/// checked for the whole collection first.
+///
+/// # Examples
+///
+/// ```
+/// use controlledburn::{burn_wkb, burn_wkb_par, BurnOptions, GridSpec};
+///
+/// // little-endian WKB polygons: small squares
+/// let square = |x: f64, y: f64| {
+///     let mut b = vec![1u8];
+///     b.extend(3u32.to_le_bytes());
+///     b.extend(1u32.to_le_bytes());
+///     b.extend(5u32.to_le_bytes());
+///     for (px, py) in [(x, y), (x + 1.4, y), (x + 1.4, y + 1.4), (x, y + 1.4), (x, y)] {
+///         b.extend(px.to_le_bytes());
+///         b.extend(py.to_le_bytes());
+///     }
+///     b
+/// };
+/// let blobs: Vec<Vec<u8>> = (0..20).map(|i| square((i % 5) as f64 * 2.0 + 0.3, (i / 5) as f64 * 2.0 + 0.3)).collect();
+/// let grid = GridSpec::new(0.0, 0.0, 10.0, 8.0, 20, 16);
+/// let par = burn_wkb_par(&blobs, &grid, BurnOptions::default(), 4).unwrap();
+/// let serial = burn_wkb(blobs.iter().map(|b| b.as_slice()), &grid, BurnOptions::default()).unwrap();
+/// assert_eq!(par, serial);
+/// ```
+pub fn burn_wkb_par<B: AsRef<[u8]> + Sync>(
+    wkb: &[B],
+    grid: &GridSpec,
+    opts: impl Into<BurnOptions>,
+    threads: usize,
+) -> Result<BurnResult, BurnError> {
+    burn_wkb_par_from(wkb, grid, opts.into(), threads, WORK_PER_THREAD)
+}
+
+fn burn_wkb_par_from<B: AsRef<[u8]> + Sync>(
+    wkb: &[B],
+    grid: &GridSpec,
+    opts: BurnOptions,
+    threads: usize,
+    per_thread: usize,
+) -> Result<BurnResult, BurnError> {
+    let cost: Vec<usize> = wkb.iter().map(|b| work_wkb(b.as_ref(), grid)).collect();
+    let Some(threads) = par_threads(&cost, threads, per_thread) else {
+        return burn_wkb(wkb.iter().map(|b| b.as_ref()), grid, opts);
+    };
+    grid.validate()?;
+    opts.validate()?;
+    opts.id(wkb.len() - 1)?;
+    Ok(par_chunks(&cost, grid, &opts, threads, |k, id, full_grid, out, sc| {
+        let blob = wkb[k].as_ref();
+        if blob.is_empty() {
+            return;
+        }
+        match parse_wkb(blob) {
+            Ok(g) => burn_one(&g, id, full_grid, grid, out, &opts, sc, None),
+            Err(e) => out.note(id, format!("failed to parse WKB: {e}")),
+        }
+    }))
+}
+
+/// The threads to use for items of `cost`, or `None` to burn on the
+/// calling thread (fewer than two threads, or fewer than two items).
+fn par_threads(cost: &[usize], threads: usize, per_thread: usize) -> Option<usize> {
+    let threads = if threads == 0 { std::thread::available_parallelism().map_or(1, |n| n.get()) } else { threads };
+    let total: usize = cost.iter().sum();
+    let threads = total.checked_div(per_thread).map_or(threads, |n| threads.min(n));
+    (threads >= 2 && cost.len() >= 2).then_some(threads)
+}
+
+/// Burn items `0..cost.len()` on `threads` threads in contiguous chunks of
+/// about equal cost, costliest first, and join the chunks' tables in item
+/// order. `burn_k(k, id, full_grid, out, scratch)` burns item `k`; ids
+/// must have been checked.
+fn par_chunks<F>(cost: &[usize], grid: &GridSpec, opts: &BurnOptions, threads: usize, burn_k: F) -> BurnResult
+where
+    F: Fn(usize, i32, &Grid<0>, &mut BurnResult, &mut CoverageScratch) + Sync,
+{
+    let total: usize = cost.iter().sum();
     let target = (total + threads * CHUNKS_PER_THREAD - 1) / (threads * CHUNKS_PER_THREAD);
     let mut chunks: Vec<Range<usize>> = Vec::new();
     let (mut start, mut acc) = (0, 0);
@@ -571,8 +662,8 @@ fn burn_par_from(
             (start, acc) = (k + 1, 0);
         }
     }
-    if start < geoms.len() {
-        chunks.push(start..geoms.len());
+    if start < cost.len() {
+        chunks.push(start..cost.len());
     }
     // Costliest first, so the last chunks taken are small.
     let chunk_cost = |r: &Range<usize>| cost[r.clone()].iter().sum::<usize>();
@@ -581,7 +672,7 @@ fn burn_par_from(
 
     let full_grid = grid.bounded();
     let next = std::sync::atomic::AtomicUsize::new(0);
-    let (chunks, order, next, full_grid, opts) = (&chunks, &order, &next, &full_grid, &opts);
+    let (chunks, order, next, full_grid, burn_k) = (&chunks, &order, &next, &full_grid, &burn_k);
     let mut parts: Vec<(usize, BurnResult)> = std::thread::scope(|sc| {
         let hs: Vec<_> = (0..threads.min(chunks.len()))
             .map(|_| {
@@ -593,9 +684,9 @@ fn burn_par_from(
                         let Some(&c) = order.get(i) else { break };
                         let mut out = BurnResult::default();
                         for k in chunks[c].clone() {
-                            // ids were checked above
+                            // ids were checked by the caller
                             let id = opts.id(k).expect("id checked");
-                            burn_one(&geoms[k], id, full_grid, grid, &mut out, opts, &mut sc, None);
+                            burn_k(k, id, full_grid, &mut out, &mut sc);
                         }
                         mine.push((c, out));
                     }
@@ -619,7 +710,7 @@ fn burn_par_from(
         out.points.extend_from_slice(&p.points);
         out.notes.extend(p.notes);
     }
-    Ok(out)
+    out
 }
 
 /// A geometry's estimated burn cost: one, plus its coordinates (the
@@ -640,6 +731,16 @@ fn work(g: &Geometry, grid: &GridSpec) -> usize {
     g.lines().iter().for_each(|l| part(l));
     g.polygons().iter().filter_map(|p| p.rings.first()).for_each(|r| part(r));
     n += g.polygons().iter().flat_map(|p| p.rings.iter().skip(1)).map(Vec::len).sum::<usize>();
+    work_from(n, lo, hi, grid)
+}
+
+/// [`work`] of a WKB blob, read without building the geometry; 1 for a
+/// blob that does not parse.
+fn work_wkb(blob: &[u8], grid: &GridSpec) -> usize {
+    crate::wkb::sample_extent(blob).map_or(1, |(n, lo, hi)| work_from(n, lo, hi, grid))
+}
+
+fn work_from(n: usize, lo: f64, hi: f64, grid: &GridSpec) -> usize {
     let (lo, hi) = (lo.max(grid.ymin), hi.min(grid.ymax));
     let rows = if hi > lo { ((hi - lo) / grid.dy()).min(grid.nrow as f64) as usize + 1 } else { 0 };
     1 + n + rows
@@ -823,6 +924,147 @@ mod tests {
         }
     }
 
+    /// ISO WKB of `g`, in either byte order, with `extra` (0-2) zero
+    /// ordinates after x and y.
+    fn to_wkb(g: &Geometry, big: bool, extra: usize) -> Vec<u8> {
+        fn head(b: &mut Vec<u8>, big: bool, base: u32, extra: usize) {
+            b.push(u8::from(!big));
+            let code = base + [0, 1000, 3000][extra];
+            b.extend(if big { code.to_be_bytes() } else { code.to_le_bytes() });
+        }
+        fn n(b: &mut Vec<u8>, big: bool, v: usize) {
+            b.extend(if big { (v as u32).to_be_bytes() } else { (v as u32).to_le_bytes() });
+        }
+        fn pt(b: &mut Vec<u8>, big: bool, c: &Coord, extra: usize) {
+            for v in [c.x, c.y].into_iter().chain(std::iter::repeat(0.0).take(extra)) {
+                b.extend(if big { v.to_be_bytes() } else { v.to_le_bytes() });
+            }
+        }
+        fn seq(b: &mut Vec<u8>, big: bool, s: &[Coord], extra: usize) {
+            n(b, big, s.len());
+            s.iter().for_each(|c| pt(b, big, c, extra));
+        }
+        fn poly(b: &mut Vec<u8>, big: bool, p: &Polygon, extra: usize) {
+            n(b, big, p.rings.len());
+            p.rings.iter().for_each(|r| seq(b, big, r, extra));
+        }
+        let mut b = Vec::new();
+        match g {
+            Geometry::Point(c) => {
+                head(&mut b, big, 1, extra);
+                pt(&mut b, big, c, extra);
+            }
+            Geometry::LineString(l) => {
+                head(&mut b, big, 2, extra);
+                seq(&mut b, big, l, extra);
+            }
+            Geometry::Polygon(p) => {
+                head(&mut b, big, 3, extra);
+                poly(&mut b, big, p, extra);
+            }
+            Geometry::MultiPoint(ps) => {
+                head(&mut b, big, 4, extra);
+                n(&mut b, big, ps.len());
+                for c in ps {
+                    head(&mut b, big, 1, extra);
+                    pt(&mut b, big, c, extra);
+                }
+            }
+            Geometry::MultiLineString(ls) => {
+                head(&mut b, big, 5, extra);
+                n(&mut b, big, ls.len());
+                for l in ls {
+                    head(&mut b, big, 2, extra);
+                    seq(&mut b, big, l, extra);
+                }
+            }
+            Geometry::MultiPolygon(ps) => {
+                head(&mut b, big, 6, extra);
+                n(&mut b, big, ps.len());
+                for p in ps {
+                    head(&mut b, big, 3, extra);
+                    poly(&mut b, big, p, extra);
+                }
+            }
+        }
+        b
+    }
+
+    /// Geometries of every kind for the WKB tests, with a ring of 40 or
+    /// more coordinates (so sampling skips some).
+    fn mixed(centres: &[(f64, f64, f64, u8)], wobble: &[f64]) -> Vec<Geometry> {
+        centres
+            .iter()
+            .map(|&(x, y, r, kind)| match kind {
+                0 => Geometry::Polygon(Polygon::new(vec![ring(x, y, r, 9, wobble)])),
+                1 => Geometry::MultiPolygon(vec![
+                    Polygon::new(vec![ring(x, y, r, 41, wobble), ring(x, y, r * 0.3, 5, wobble)]),
+                    Polygon::new(vec![ring(x + r * 0.8, y, r * 0.7, 6, wobble)]),
+                ]),
+                2 => Geometry::LineString(ring(x, y, r, 37, wobble)),
+                3 => {
+                    Geometry::MultiPoint((0..23).map(|i| Coord::new(x + i as f64 * 0.7, y - i as f64 * 0.4)).collect())
+                }
+                // an open line whose last coordinate alone reaches higher:
+                // 38 coordinates, so the sample's step (3) misses it
+                4 => Geometry::MultiLineString(vec![
+                    ring(x, y, r, 8, wobble),
+                    vec![],
+                    (0..38).map(|i| Coord::new(x + i as f64 * 0.2, if i == 37 { y + 5.0 } else { y })).collect(),
+                ]),
+                5 => Geometry::Polygon(Polygon::new(vec![])),
+                6 => Geometry::Point(Coord::new(x, y)),
+                _ => Geometry::Point(Coord::new(f64::NAN, y)),
+            })
+            .collect()
+    }
+
+    proptest! {
+        /// `burn_wkb_par` equals `burn_wkb`, record for record and note for
+        /// note, with blobs in both byte orders, with Z and M, empty and
+        /// unparseable blobs among them.
+        #[test]
+        fn wkb_parallel_equals_serial(
+            centres in prop::collection::vec((-3.0..40.0f64, -3.0..26.0f64, 0.3..6.0f64, 0u8..10), 0..40),
+            wobble in prop::collection::vec(0.0..1.0f64, 9),
+            threads in 2usize..12, approx in any::<bool>(), merge in any::<bool>(), id_offset in 0i32..1000,
+        ) {
+            let grid = GridSpec::new(0.0, 0.0, 37.0, 23.0, 53, 31);
+            let geoms = mixed(&centres, &wobble);
+            let blobs: Vec<Vec<u8>> = geoms
+                .iter()
+                .zip(&centres)
+                .enumerate()
+                .map(|(k, (g, c))| match c.3 {
+                    8 => Vec::new(),
+                    9 => vec![1, 3, 0, 0, 0, 7],
+                    _ => to_wkb(g, k % 2 == 1, k % 3),
+                })
+                .collect();
+            let opts = BurnOptions::default()
+                .with_mode(if approx { BurnMode::Approx } else { BurnMode::Coverage })
+                .with_merge_parts(merge)
+                .with_id_offset(id_offset);
+            let want = burn_wkb(blobs.iter().map(|b| b.as_slice()), &grid, opts).unwrap();
+            let got = burn_wkb_par_from(&blobs, &grid, opts, threads, 0).unwrap();
+            prop_assert_eq!(got, want);
+        }
+
+        /// The work read from a blob is the work of the parsed geometry.
+        #[test]
+        fn wkb_work_is_work(
+            centres in prop::collection::vec((-3.0..40.0f64, -3.0..26.0f64, 0.3..6.0f64, 0u8..8), 1..20),
+            wobble in prop::collection::vec(0.0..1.0f64, 9),
+        ) {
+            let grid = GridSpec::new(0.0, 0.0, 37.0, 23.0, 53, 31);
+            for g in mixed(&centres, &wobble) {
+                for (big, extra) in [(false, 0), (true, 0), (false, 1), (true, 2)] {
+                    prop_assert_eq!(work_wkb(&to_wkb(&g, big, extra), &grid), work(&g, &grid), "{:?}", g);
+                }
+            }
+        }
+    }
+
     #[test]
     fn errors_as_serial() {
         let sq = |x: f64| Geometry::Polygon(Polygon::new(vec![ring(x, 5.0, 3.0, 12, &[0.5])]));
@@ -853,5 +1095,23 @@ mod tests {
         assert_eq!(burn_par_from(&[sq(4.0)], &grid, BurnOptions::default(), 8, 0).unwrap(), one);
         let none = burn(&[], &grid, BurnOptions::default()).unwrap();
         assert_eq!(burn_par_from(&[], &grid, BurnOptions::default(), 8, 0).unwrap(), none);
+        let blobs: [Vec<u8>; 0] = [];
+        assert_eq!(burn_wkb_par(&blobs, &grid, BurnOptions::default(), 8).unwrap(), none);
+    }
+
+    #[test]
+    fn wkb_errors_as_serial() {
+        let sq = |x: f64| to_wkb(&Geometry::Polygon(Polygon::new(vec![ring(x, 5.0, 3.0, 12, &[0.5])])), false, 0);
+        let blobs = [sq(3.0), sq(6.0)];
+        let ok = GridSpec::new(0.0, 0.0, 10.0, 10.0, 10, 10);
+        let bad = GridSpec::new(0.0, 0.0, 10.0, 10.0, 0, 10);
+        for (grid, opts) in [
+            (bad, BurnOptions::default()),
+            (ok, BurnOptions::default().with_id_offset(-1)),
+            (ok, BurnOptions::default().with_id_offset(i32::MAX)),
+        ] {
+            let want = burn_wkb(blobs.iter().map(|b| b.as_slice()), &grid, opts).unwrap_err().to_string();
+            assert_eq!(burn_wkb_par_from(&blobs, &grid, opts, 4, 0).unwrap_err().to_string(), want);
+        }
     }
 }

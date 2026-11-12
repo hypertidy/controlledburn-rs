@@ -51,7 +51,8 @@
 //! ## Entry points
 //!
 //! * Burn: [`burn`], [`burn_wkb`], `burn_geo_traits` (feature
-//!   `geo-traits`); on several threads [`burn_par`]; one window of the
+//!   `geo-traits`); on several threads [`burn_par`], or [`burn_wkb_par`]
+//!   from WKB; one window of the
 //!   grid [`burn_window`].
 //! * Tiles: [`slice_tiles`], [`slice_tiles_par`], and [`crop`] for one
 //!   window.
@@ -131,7 +132,7 @@ mod wkb;
 
 #[cfg(feature = "geo-traits")]
 pub use burn::burn_geo_traits;
-pub use burn::{burn, burn_par, burn_window, burn_wkb, BurnMode, BurnOptions};
+pub use burn::{burn, burn_par, burn_window, burn_wkb, burn_wkb_par, BurnMode, BurnOptions};
 pub use coalesce::coalesce_runs;
 pub use crop::crop;
 pub use error::{BurnError, WkbError};

@@ -49,7 +49,7 @@ cell: parts crossing the same cell are summed.
 | to | use |
 |---|---|
 | burn geometries | `burn` (the crate's `Geometry`), `burn_wkb` (ISO and EWKB, both byte orders, Z/M skipped), `burn_geo_traits` (feature `geo-traits`) |
-| burn on several threads | `burn_par` |
+| burn on several threads | `burn_par`; `burn_wkb_par` from WKB (parses on the burning thread) |
 | burn one window of the grid | `burn_window` |
 | cut a result into tiles | `slice_tiles`, `slice_tiles_par`; `crop` for one window |
 | make pixels | `materialize`, with fasterize-style pixel functions |
@@ -157,6 +157,14 @@ grid.
   concatenation is serial, and on 4 KB pages it is first-touch bound:
   about half the time of a 32-thread coverage burn of 8-14 M records, a third
   of that with transparent huge pages.
+- *Parallel from WKB*: `burn_wkb_par(&blobs, &grid, opts, threads)` gives
+  `burn_wkb`'s result the same way, parsing each blob on the thread that
+  burns it. Parsing everything first and calling `burn_par` allocates every
+  geometry at once and frees it after, which on tens of thousands of small
+  polygons costs as much as the burn (cb-compare's run of 0.3.0: 2-11x
+  slower than a parse-as-you-burn split at 128 threads). On the dev VM at
+  32 threads, rock-32m approx took 17 ms this way, against 45 ms parsing
+  first and 215 ms serial.
 - *Output too large to hold*: burn a batch of geometries, slice it into
   tiles, merge each tile into the output, drop the batch. A tile can
   hold records from more than one batch, so merge rather than overwrite.
