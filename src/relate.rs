@@ -700,14 +700,8 @@ fn cell_facts(shape: &Shape, bx: &CellBox, segs: impl Iterator<Item = usize>) ->
                 continue;
             }
             point = true;
-            let branches: &[Coord] = if c == a {
-                &[b]
-            } else if c == b {
-                &[a]
-            } else {
-                &[a, b]
-            };
-            let inward = branches.iter().filter(|&&o| bx.inward_corner(k, o)).count() as u32;
+            // the boundary leaves the corner towards each endpoint not on it
+            let inward = [a, b].iter().filter(|&&o| o != c && bx.inward_corner(k, o)).count() as u32;
             ev.push(Event { lo: m[k], hi: m[k], inward });
         }
         // Along a wall: a span, no branch into the cell.
