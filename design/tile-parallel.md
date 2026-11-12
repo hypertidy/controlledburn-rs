@@ -1,6 +1,6 @@
 # Tile-parallel burning, and routing geometries by footprint
 
-Status: design, not implemented. Scope: how controlledburn-rs should
+Status: design. The window burn is implemented (`burn_window`, 0.3.0), as is a feature-parallel whole-grid burn (`burn_par`); routing by footprint is not. Scope: how controlledburn-rs should
 produce tiled output in parallel (per chunk of a data cube, per worker,
 per machine), drawing on the measurements in
 [hypertidy/cb-compare](https://github.com/hypertidy/cb-compare)

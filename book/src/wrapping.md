@@ -5,4 +5,6 @@
 as flat arrays; `burn_wkb` accepts the bytes a database or geometry
 library already has; the `serde` feature serialises everything; the
 `geo-types` feature converts from the Rust geospatial ecosystem's
-common types. Sketches for pyo3 and extendr will live here.
+common types, and the `geo-traits` feature burns anything that implements
+`geo_traits::GeometryTrait` (the `wkb` crate's zero-copy reader, GeoArrow
+arrays) without converting first. Sketches for pyo3 and extendr will live here.

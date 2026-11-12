@@ -1,18 +1,27 @@
 //! # controlledburn
 //!
-//! Sparse scanline rasterization of polygons, lines and points onto a
-//! regular grid, with exact coverage fractions for polygon boundary
-//! cells. O(perimeter) in time and memory: no pixel buffer is ever
-//! materialized by the burn itself.
+//! Sparse scanline rasterization of polygons, lines and points, with
+//! exact coverage fractions for polygon boundary cells. O(perimeter) in
+//! time and memory: no pixel buffer is ever materialized by the burn
+//! itself.
+//!
+//! The engine burns onto a regular lattice ([`GridSpec`]). Rotated,
+//! rectilinear and curvilinear grids are reached through index space: a
+//! front end maps each vertex to fractional `(col, row)` and burns on a
+//! lattice of unit cells, and the records are then in the original
+//! grid's `(row, col)`. That is exact for affine and rectilinear grids
+//! and for curvilinear grids with equal-area cells (`design/grid-frontends.md`
+//! in the repository).
 //!
 //! This crate is a pure Rust port of the C++ core of
-//! [controlledburn](https://github.com/hypertidy/controlledburn). It has
-//! no dependencies and no unsafe code.
+//! [controlledburn](https://github.com/hypertidy/controlledburn), and now
+//! its canonical implementation. It has no required dependencies and no
+//! unsafe code.
 //!
 //! ## The contract
 //!
 //! Input: geometries ([`Geometry`]), a grid ([`GridSpec`]: extent plus
-//! column/row counts, row 1 at the top) and [`BurnOptions`].
+//! column/row counts, row 0 at the top) and [`BurnOptions`].
 //!
 //! Output ([`BurnResult`]), four typed tables with 0-based indices (row 0
 //! at the top) and half-open run ranges. Geometry `k` in the input slice
@@ -38,6 +47,19 @@
 //!   only, much faster.
 //!
 //! Lines and points are unaffected by mode.
+//!
+//! ## Entry points
+//!
+//! * Burn: [`burn`], [`burn_wkb`], `burn_geo_traits` (feature
+//!   `geo-traits`); on several threads [`burn_par`]; one window of the
+//!   grid [`burn_window`].
+//! * Tiles: [`slice_tiles`], [`slice_tiles_par`], and [`crop`] for one
+//!   window.
+//! * Pixels: [`materialize`].
+//! * Records: [`merge_cells`] (one record per cell and id, after a fold
+//!   or a concatenation), [`coalesce_runs`].
+//! * Dense, for small rings in index space: [`CoverageWindow`],
+//!   [`RowPrefix`], [`ring_area`], with [`Measure`] for cell areas.
 //!
 //! ## Example
 //!

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Docs reviewed for 0.3.0.** The README and crate docs no longer
+  describe the crate as regular-grid only: they say the engine works on
+  a regular lattice and other grids go through index space (a Grids
+  section with the exactness table from `design/grid-frontends.md`).
+  New: an entry-point table, the parity claim made precise (with
+  `BurnOptions::parity`), current `cargo bench` numbers beside the port's,
+  and a link to cb-compare. Fixed: the crate docs said row 1 is the top
+  row (it is row 0). The book's index lists the cropping chapter, and
+  `design/tile-parallel.md`'s status is current.
 - **`burn_par`: `burn` on several threads** (std only, `0` for all
   available), with the same result record for record, notes included.
   The geometries are split into contiguous chunks of about equal
