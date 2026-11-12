@@ -53,6 +53,7 @@ cell: parts crossing the same cell are summed.
 | burn one window of the grid | `burn_window` |
 | cut a result into tiles | `slice_tiles`, `slice_tiles_par`; `crop` for one window |
 | make pixels | `materialize`, with fasterize-style pixel functions |
+| relate polygons to cells (DE-9IM: covers, intersects, touches, exact all-touched) | `relate_cells` after a burn: a matrix for each cell the boundary touches; every other cell is covered (a run) or disjoint |
 | tidy records | `merge_cells` (one record per cell and id, after a fold or a concatenation), `coalesce_runs` |
 | exact coverage or integrals of small rings, dense | `CoverageWindow`, `RowPrefix`, `ring_area`, with `Measure` for cell areas (planar, or spherical on grids whose rows are parallels) |
 

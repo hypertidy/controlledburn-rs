@@ -113,13 +113,13 @@ impl BurnOptions {
     }
 
     /// The id of the geometry at `k`.
-    fn id(&self, k: usize) -> Result<i32, BurnError> {
+    pub(crate) fn id(&self, k: usize) -> Result<i32, BurnError> {
         i32::try_from(k).ok().and_then(|k| self.id_offset.checked_add(k)).ok_or_else(|| {
             BurnError::InvalidOptions(format!("geometry {k} with id_offset {}: id beyond i32::MAX", self.id_offset))
         })
     }
 
-    fn validate(&self) -> Result<(), BurnError> {
+    pub(crate) fn validate(&self) -> Result<(), BurnError> {
         if self.id_offset < 0 {
             return Err(BurnError::InvalidOptions(format!("id_offset {} is negative", self.id_offset)));
         }
