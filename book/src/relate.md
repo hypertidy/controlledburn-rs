@@ -181,7 +181,27 @@ let slivers_in = rel
 // run cells the country does not in fact cover
 let slivers_out = rel.iter().filter(|c| !c.matrix.covers() && in_run(c.id, c.row, c.col)).count();
 assert_eq!((slivers_in, slivers_out), (12, 6));
+# let csv = std::fs::read_to_string(format!("{data_dir}/ne_110m_countries.csv")).unwrap();
+# let names: Vec<String> = csv.lines().skip(1).map(|l| l.split(',').nth(1).unwrap().trim_matches('"').to_string()).collect();
+# let sudan = names.iter().position(|n| n == "Sudan").unwrap() as i32;
+# let m = rel.iter().find(|c| (c.id, c.row, c.col) == (sudan, 81, 213)).unwrap().matrix;
+# assert!(in_run(sudan, 81, 213) && m.as_str() == "212101212");
 ```
+
+One of the six is not a sliver: it comes from an invalid polygon.
+Natural Earth's Sudan is a single ring that runs a thin spike south to
+8.68°N along one of its own edges and comes back almost onto that edge,
+about 2e-7 degrees from it. GEOS and `geo` both report the ring as
+invalid (a self-intersection near 33.96°E, 9.46°N). In the cell at
+33–34°E, 8–9°N (row 81, column 213), almost all South Sudan, the burn's
+winding fill counts Sudan as covering the whole cell. Repaired, the
+polygon covers about 1e-8 of it, and `relate_cells` sees the spike's
+boundary cross the cell and calls it partly covered (`212101212`).
+Neither answer is "right" for a ring that crosses itself: `relate_cells`
+assumes valid polygons, as does the burn's area. The other 17 cells are
+genuine slivers, each within 1e-6 of a cell of the exact area that `geo`
+computes. (The United States, three of them, is also invalid, but only
+at its Alaska–Yukon border, far from those cells.)
 
 ## How it works, and what it costs
 

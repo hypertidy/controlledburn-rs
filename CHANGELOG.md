@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **Book, "Predicates per cell": one of the six "run cells a country does
+  not cover" is invalid input, not a sliver.** Natural Earth's Sudan ring
+  crosses itself (a spike south to 8.68°N that returns about 2e-7 degrees
+  from its own edge); in the cell at 33–34°E, 8–9°N the burn's winding
+  fill counts Sudan as covering it, while the repaired polygon covers
+  about 1e-8. The chapter now says so and asserts that cell; the other 17
+  cells agree with `geo`'s exact areas to within 1e-6 of a cell. Reported
+  from the cbr package.
+
 ## 0.3.2 (2026-11-12)
 
 Adds `burn_wkb_par`: `burn_wkb` on several threads, parsing each blob on
