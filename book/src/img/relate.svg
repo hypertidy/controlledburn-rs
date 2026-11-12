@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="438" viewBox="0 0 420 438">
+<rect x="0.00" y="0.00" width="420.00" height="438.00" fill="#ffffff"/>
+<path fill="#c8692d" d="M130,90h160v40h-160zM90,130h200v40h-200zM50,170h200v40h-200zM50,210h200v40h-200zM50,250h200v40h-200z"/>
+<rect x="130.00" y="10.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="170.00" y="10.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="90.00" y="50.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="130.00" y="50.00" width="40.00" height="40.00" fill="#eac7b0"/>
+<rect x="170.00" y="50.00" width="40.00" height="40.00" fill="#eac7b0"/>
+<rect x="210.00" y="50.00" width="40.00" height="40.00" fill="#eac7b0"/>
+<rect x="250.00" y="50.00" width="40.00" height="40.00" fill="#eac7b0"/>
+<rect x="290.00" y="50.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="50.00" y="90.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="90.00" y="90.00" width="40.00" height="40.00" fill="#eac7b0"/>
+<rect x="130.00" y="90.00" width="40.00" height="40.00" fill="#c8692d"/>
+<rect x="250.00" y="90.00" width="40.00" height="40.00" fill="#c8692d"/>
+<rect x="290.00" y="90.00" width="40.00" height="40.00" fill="#eac7b0"/>
+<rect x="330.00" y="90.00" width="40.00" height="40.00" fill="#eac7b0"/>
+<rect x="10.00" y="130.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="50.00" y="130.00" width="40.00" height="40.00" fill="#eac7b0"/>
+<rect x="90.00" y="130.00" width="40.00" height="40.00" fill="#c8692d"/>
+<rect x="250.00" y="130.00" width="40.00" height="40.00" fill="#c8692d"/>
+<rect x="290.00" y="130.00" width="40.00" height="40.00" fill="#eac7b0"/>
+<rect x="330.00" y="130.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="10.00" y="170.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="50.00" y="170.00" width="40.00" height="40.00" fill="#c8692d"/>
+<rect x="210.00" y="170.00" width="40.00" height="40.00" fill="#c8692d"/>
+<rect x="250.00" y="170.00" width="40.00" height="40.00" fill="#eac7b0"/>
+<rect x="290.00" y="170.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="10.00" y="210.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="50.00" y="210.00" width="40.00" height="40.00" fill="#c8692d"/>
+<rect x="210.00" y="210.00" width="40.00" height="40.00" fill="#c8692d"/>
+<rect x="250.00" y="210.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="10.00" y="250.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="50.00" y="250.00" width="40.00" height="40.00" fill="#c8692d"/>
+<rect x="90.00" y="250.00" width="40.00" height="40.00" fill="#c8692d"/>
+<rect x="130.00" y="250.00" width="40.00" height="40.00" fill="#c8692d"/>
+<rect x="170.00" y="250.00" width="40.00" height="40.00" fill="#c8692d"/>
+<rect x="210.00" y="250.00" width="40.00" height="40.00" fill="#c8692d"/>
+<rect x="250.00" y="250.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="10.00" y="290.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="50.00" y="290.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="90.00" y="290.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="130.00" y="290.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="170.00" y="290.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="210.00" y="290.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<rect x="250.00" y="290.00" width="40.00" height="40.00" fill="#a2c4ed"/>
+<line x1="10.00" y1="10.00" x2="10.00" y2="330.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="50.00" y1="10.00" x2="50.00" y2="330.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="90.00" y1="10.00" x2="90.00" y2="330.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="130.00" y1="10.00" x2="130.00" y2="330.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="170.00" y1="10.00" x2="170.00" y2="330.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="210.00" y1="10.00" x2="210.00" y2="330.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="250.00" y1="10.00" x2="250.00" y2="330.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="290.00" y1="10.00" x2="290.00" y2="330.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="330.00" y1="10.00" x2="330.00" y2="330.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="370.00" y1="10.00" x2="370.00" y2="330.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="410.00" y1="10.00" x2="410.00" y2="330.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="10.00" x2="410.00" y2="10.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="50.00" x2="410.00" y2="50.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="90.00" x2="410.00" y2="90.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="130.00" x2="410.00" y2="130.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="170.00" x2="410.00" y2="170.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="210.00" x2="410.00" y2="210.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="250.00" x2="410.00" y2="250.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="290.00" x2="410.00" y2="290.00" stroke="#d4d4d4" stroke-width="1"/>
+<line x1="10.00" y1="330.00" x2="410.00" y2="330.00" stroke="#d4d4d4" stroke-width="1"/>
+<clipPath id="c1"><rect x="10.00" y="10.00" width="400.00" height="320.00"/></clipPath>
+<path d="M50.0,290.0L250.0,290.0L250.0,210.0L350.0,110.0L170.0,50.0L50.0,170.0L50.0,290.0Z" fill="none" fill-rule="evenodd" stroke="#333333" stroke-width="2" stroke-linejoin="round" clip-path="url(#c1)"/>
+<rect x="10.00" y="10.00" width="400.00" height="320.00" fill="none" stroke="#777777" stroke-width="1"/>
+<rect x="10.00" y="352.00" width="16.00" height="16.00" fill="#c8692d"/>
+<rect x="10.00" y="352.00" width="16.00" height="16.00" fill="none" stroke="#d4d4d4" stroke-width="1"/>
+<text x="34.00" y="364.50" font-size="13" text-anchor="start" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">covers the cell (a run, or boundary only on its walls)</text>
+<rect x="10.00" y="374.00" width="16.00" height="16.00" fill="#eac7b0"/>
+<rect x="10.00" y="374.00" width="16.00" height="16.00" fill="none" stroke="#d4d4d4" stroke-width="1"/>
+<text x="34.00" y="386.50" font-size="13" text-anchor="start" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">shares part of the cell (the boundary crosses it)</text>
+<rect x="10.00" y="396.00" width="16.00" height="16.00" fill="#a2c4ed"/>
+<rect x="10.00" y="396.00" width="16.00" height="16.00" fill="none" stroke="#d4d4d4" stroke-width="1"/>
+<text x="34.00" y="408.50" font-size="13" text-anchor="start" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">touches the cell: a wall or a corner, no area (no record)</text>
+<rect x="10.00" y="418.00" width="16.00" height="16.00" fill="#ffffff"/>
+<rect x="10.00" y="418.00" width="16.00" height="16.00" fill="none" stroke="#d4d4d4" stroke-width="1"/>
+<text x="34.00" y="430.50" font-size="13" text-anchor="start" fill="#333333" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">disjoint</text>
+</svg>

@@ -9,8 +9,8 @@
 use std::fmt::Write as _;
 
 use controlledburn::{
-    burn, burn_wkb, crop, materialize, parse_wkb, BurnOptions, BurnResult, Coord, EdgePolicy, Geometry, GridSpec,
-    MaterializeOptions, PixelFn, Polygon,
+    burn, burn_wkb, crop, materialize, parse_wkb, relate_cells, BurnOptions, BurnResult, Coord, EdgePolicy, Geometry,
+    GridSpec, MaterializeOptions, PixelFn, Polygon,
 };
 
 const OUT: &str = "book/src/img";
@@ -639,6 +639,64 @@ fn grids() {
     svg.save("grids.svg");
 }
 
+/// relate_cells: each cell coloured by how the polygon meets it.
+fn relate_figure() {
+    let grid = GridSpec::new(0.0, 0.0, 10.0, 8.0, 10, 8);
+    let ring = vec![
+        Coord::new(1.0, 1.0),
+        Coord::new(6.0, 1.0),
+        Coord::new(6.0, 3.0),
+        Coord::new(8.5, 5.5),
+        Coord::new(4.0, 7.0),
+        Coord::new(1.0, 4.0),
+        Coord::new(1.0, 1.0),
+    ];
+    let g = Geometry::Polygon(Polygon::new(vec![ring]));
+    let geoms = [g];
+    let r = burn(&geoms, &grid, BurnOptions::default()).unwrap();
+    let rel = relate_cells(&r, &geoms, &grid, BurnOptions::default()).unwrap();
+    let s = 40.0;
+    let p = Panel { x0: 10.0, y0: 10.0, s, grid };
+    let legend_h = 4.0 * 22.0 + 10.0;
+    let mut svg = Svg::new(p.w() + 20.0, p.h() + 20.0 + legend_h);
+    let covers = mix(COVER, 1.0);
+    let partial = mix(COVER, 0.38);
+    let touches = mix(MORE, 0.45);
+    // runs the boundary does not reach, then every related cell
+    p.records_at(&mut svg, &BurnResult { runs: r.runs.clone(), ..Default::default() }, COVER, 1.0);
+    for c in &rel {
+        let fill = if c.matrix.covers() {
+            covers.clone()
+        } else if c.matrix.interiors_meet() {
+            partial.clone()
+        } else if c.matrix.touches() {
+            touches.clone()
+        } else {
+            "#ffffff".to_string()
+        };
+        p.paint_cell(&mut svg, c.row, c.col, &fill);
+    }
+    p.lines(&mut svg, GRID, 1.0);
+    p.geometry(&mut svg, &geoms[0], "none", INK, 2.0);
+    p.frame(&mut svg);
+    let y0 = p.y0 + p.h() + 22.0;
+    for (i, (fill, text)) in [
+        (&covers, "covers the cell (a run, or boundary only on its walls)"),
+        (&partial, "shares part of the cell (the boundary crosses it)"),
+        (&touches, "touches the cell: a wall or a corner, no area (no record)"),
+        (&"#ffffff".to_string(), "disjoint"),
+    ]
+    .iter()
+    .enumerate()
+    {
+        let y = y0 + i as f64 * 22.0;
+        svg.rect(p.x0, y, 16.0, 16.0, fill);
+        svg.outline([p.x0, y, 16.0, 16.0], GRID, 1.0, false);
+        svg.text(p.x0 + 24.0, y + 12.5, text, 13.0, "start", INK);
+    }
+    svg.save("relate.svg");
+}
+
 fn main() {
     std::fs::create_dir_all(OUT).unwrap();
     let blobs = countries();
@@ -650,4 +708,5 @@ fn main() {
     crop_figure();
     merge_parts();
     grids();
+    relate_figure();
 }

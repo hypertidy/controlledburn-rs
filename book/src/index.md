@@ -34,6 +34,7 @@ code.
 | [Materialize, chunk by chunk](materialize.md) | turning the tables into pixels one window at a time |
 | [Cropping to a tile](crop.md) | one window with `crop`, a tile grid with `slice_tiles`, per-tile burns with `burn_window` |
 | [Zonal statistics from the tables](zonal.md) | area-weighted means straight from runs and edges |
+| [Predicates per cell](relate.md) | DE-9IM of polygons against cells after the burn: covers, touches, exact all-touched |
 | [Wrapping the crate](wrapping.md) | what a Python, R or database binding needs to know |
 
 API reference: [docs.rs/controlledburn](https://docs.rs/controlledburn).
