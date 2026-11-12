@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.3.2 (2026-11-12)
+
+Adds `burn_wkb_par`: `burn_wkb` on several threads, parsing each blob on
+the thread that burns it. Nothing else in the API changes, and burns give
+the same records as 0.3.1. The book's test script handles the build layout
+of Cargo from Rust 1.100.
 
 - **`burn_wkb_par`: `burn_wkb` on several threads.** The same result as
   `burn_wkb`, record for record and note for note, with each blob parsed
