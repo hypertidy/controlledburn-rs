@@ -175,9 +175,8 @@ fn walk_ring(
         if cr.row < 1 || cr.row > sub_rows || !keep.contains(&(cr.row - 1)) {
             continue;
         }
-        let dy: f64 = cr
-            .traversals
-            .iter()
+        let dy: f64 = cells
+            .traversals(cr)
             .filter(|t| is_valid(t, arena) && t.traversed())
             .map(|t| {
                 let tc = t.coords(arena);
@@ -223,7 +222,7 @@ fn walk_ring(
         // Valid traversals: proper enter + exit with movement, or a closed
         // ring entirely within this cell.
         valid.clear();
-        valid.extend(cr.traversals.iter().filter(|t| is_valid(t, arena)).copied());
+        valid.extend(cells.traversals(cr).filter(|t| is_valid(t, arena)).copied());
         if valid.is_empty() {
             continue;
         }

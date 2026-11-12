@@ -18,18 +18,25 @@ use crate::grid::Grid;
 
 /// One pass of the polyline through one cell. Coordinates live in the
 /// walk's shared arena (`Cells::coords`) as the range `start..start + len`.
-#[derive(Clone, Copy, Debug, Default)]
+///
+/// 16 bytes: a ring of 10^6 vertices can make 10^8 traversals.
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct Traversal {
-    start: usize,
-    len: usize,
+    start: u32,
+    len: u32,
+    /// the next traversal of the same cell in `Cells::flat`, or `NONE`
+    next: u32,
     pub entry: Option<Side>,
     pub exit: Option<Side>,
 }
 
+const NONE: u32 = u32::MAX;
+
 impl Traversal {
     #[inline]
     pub fn coords<'a>(&self, arena: &'a [Coord]) -> &'a [Coord] {
-        &arena[self.start..self.start + self.len]
+        let s = self.start as usize;
+        &arena[s..s + self.len as usize]
     }
 
     #[inline]
@@ -50,21 +57,61 @@ impl Traversal {
 }
 
 /// Per-cell traversal data for one cell (row, col) of the padded grid.
+/// Its traversals are `Cells::traversals(self)`.
 #[derive(Clone, Debug)]
 pub(crate) struct CellRecord {
     pub row: usize,
     pub col: usize,
     pub bbox: BBox,
-    pub traversals: Vec<Traversal>,
+    /// first and last of its traversals in `Cells::flat`
+    head: u32,
+    tail: u32,
 }
 
 /// Cells visited by a walk, in first-visit order, plus the coordinate
 /// arena all traversals index into. Consumers that need a deterministic
 /// order sort by (row, col).
+///
+/// Every traversal lives in one array, in walk order, each linked to the
+/// next traversal of its cell, rather than in a vector per cell: a
+/// detailed ring of 10^6 vertices visits ten million cells about eleven
+/// times each, and the vectors were 27 million allocations.
+/// Grouping the array by cell after the walk would make the reads
+/// contiguous, but costs more than it saves (an in-place counting sort
+/// took 7 s on that ring) or a second copy of the array.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Cells {
     pub records: Vec<CellRecord>,
     pub coords: Vec<Coord>,
+    flat: Vec<Traversal>,
+}
+
+impl Cells {
+    /// The traversals of `cr`, in the order the walk made them.
+    #[inline]
+    pub fn traversals<'a>(&'a self, cr: &CellRecord) -> Traversals<'a> {
+        Traversals { flat: &self.flat, at: cr.head }
+    }
+}
+
+/// The traversals of one cell, in walk order (`Cells::traversals`).
+pub(crate) struct Traversals<'a> {
+    flat: &'a [Traversal],
+    at: u32,
+}
+
+impl<'a> Iterator for Traversals<'a> {
+    type Item = &'a Traversal;
+
+    #[inline]
+    fn next(&mut self) -> Option<&'a Traversal> {
+        if self.at == NONE {
+            return None;
+        }
+        let t = &self.flat[self.at as usize];
+        self.at = t.next;
+        Some(t)
+    }
 }
 
 /// Minimal multiplicative hasher for the (row, col) index. The walker
@@ -207,16 +254,12 @@ pub(crate) struct Walker {
     /// The cells of the last walk.
     pub cells: Cells,
     index: CellIndex,
-    spare: Vec<Vec<Traversal>>,
 }
 
 impl Walker {
     fn reset(&mut self) {
-        for r in self.cells.records.drain(..) {
-            let mut t = r.traversals;
-            t.clear();
-            self.spare.push(t);
-        }
+        self.cells.records.clear();
+        self.cells.flat.clear();
         self.cells.coords.clear();
         // Clearing a hash map costs its capacity, not its length: after one
         // large ring, a run of small ones would each pay for it. Start
@@ -232,7 +275,7 @@ impl Walker {
     /// `self.cells`. See `walk_polyline`.
     pub fn walk(&mut self, grid: &Grid<1>, closed: bool) -> Result<(), String> {
         self.reset();
-        let Walker { input: coords, cells, index, spare } = self;
+        let Walker { input: coords, cells, index } = self;
         if coords.is_empty() {
             return Ok(());
         }
@@ -243,6 +286,7 @@ impl Walker {
         cells.coords.reserve(coords.len() * 2 + 8);
         let arena = &mut cells.coords;
         let records = &mut cells.records;
+        let flat = &mut cells.flat;
         // Cache of the last cell looked up: consecutive visits are usually
         // the same cell or a neighbour.
         let mut last: Option<((usize, usize), usize)> = None;
@@ -265,8 +309,7 @@ impl Walker {
                 Some((k, i)) if k == (row, col) => i,
                 _ => {
                     let i = *index.entry((row, col)).or_insert_with(|| {
-                        let traversals = spare.pop().unwrap_or_default();
-                        records.push(CellRecord { row, col, bbox: grid.cell(row, col), traversals });
+                        records.push(CellRecord { row, col, bbox: grid.cell(row, col), head: NONE, tail: NONE });
                         records.len() - 1
                     });
                     last = Some(((row, col), i));
@@ -275,7 +318,9 @@ impl Walker {
             };
             let bbox = records[ci].bbox;
 
-            let mut trav = Traversal { start: arena.len(), len: 0, entry: None, exit: None };
+            // 32-bit offsets: an arena of 2^32 coordinates is 64 GB
+            let start = u32::try_from(arena.len()).map_err(|_| "ring walk too large (2^32 coordinates)")?;
+            let mut trav = Traversal { start, len: 0, next: NONE, entry: None, exit: None };
 
             while pos < coords.len() {
                 let next = match last_exit {
@@ -373,7 +418,16 @@ impl Walker {
             }
 
             let exit_side = trav.exit;
-            records[ci].traversals.push(trav);
+            let k =
+                u32::try_from(flat.len()).ok().filter(|&k| k != NONE).ok_or("ring walk too large (2^32 traversals)")?;
+            let rec = &mut records[ci];
+            if rec.head == NONE {
+                rec.head = k;
+            } else {
+                flat[rec.tail as usize].next = k;
+            }
+            rec.tail = k;
+            flat.push(trav);
 
             if exited {
                 match exit_side {
@@ -406,7 +460,7 @@ mod tests {
         keys.sort();
         assert_eq!(keys, vec![(1, 4), (2, 3), (2, 4), (3, 2), (3, 3), (4, 1), (4, 2)]);
         // start cell has entry None
-        assert!(cells.records[0].traversals[0].entry.is_none());
+        assert!(cells.traversals(&cells.records[0]).next().unwrap().entry.is_none());
     }
 
     #[test]
@@ -423,9 +477,10 @@ mod tests {
         // The start cell (row 8, col 3 in padded coords) gets two
         // traversals: the incomplete one and the stitched one.
         let start = cells.records.iter().find(|c| (c.row, c.col) == (8, 3)).unwrap();
-        assert_eq!(start.traversals.len(), 2);
-        assert!(start.traversals[0].entry.is_none());
-        assert!(start.traversals[1].traversed());
+        let ts: Vec<_> = cells.traversals(start).collect();
+        assert_eq!(ts.len(), 2);
+        assert!(ts[0].entry.is_none());
+        assert!(ts[1].traversed());
         assert_eq!(cells.records.len(), 16);
     }
 }

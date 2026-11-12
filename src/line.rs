@@ -61,7 +61,7 @@ pub(crate) fn process_line(
                 lengths.len() - 1
             };
             let total_length = &mut lengths[k].1;
-            for t in &cr.traversals {
+            for t in cells.traversals(cr) {
                 let tc = t.coords(arena);
                 if tc.len() < 2 {
                     continue;

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **The walker keeps a ring's traversals in one array**, linked per cell,
+  instead of a vector per cell, and a traversal is 16 bytes, not 24. A
+  detailed ring revisits its cells many times (coast-1e6: 111 M
+  traversals over 10 M cells), and the vectors were 27 M allocations;
+  now they are 275 k (coast-1e5: 961 k to 51 k), what is left growing
+  with the sweep's rows. Output is bit-identical (golden parity, the
+  property tests, and hashes of every cb-compare input in both modes).
+  On the dev VM, serial coverage burns are 4-6% faster (coast-1e5,
+  rock-32m, small-1e5, rects) and coast-1e6 is level, with its peak
+  memory down from 9.2 to 7.1 GB. A ring that would need more than 2^32
+  arena coordinates or traversals (64 GB of coordinates) is skipped
+  with a note. Grouping the traversals by cell after the walk was tried:
+  an in-place counting sort cost 7 s on coast-1e6, a second copy 24%
+  more memory.
 - **Breaking: `BurnOptions`, `BurnError` and `WkbError` are
   `#[non_exhaustive]`**, so later versions can add options and error
   variants without breaking callers. Build options with `default()`,
