@@ -96,15 +96,19 @@ mod output;
 mod point;
 mod polygon;
 mod tiles;
+#[cfg(feature = "geo-traits")]
+pub mod traits;
 mod walker;
 mod window;
 mod wkb;
 
+#[cfg(feature = "geo-traits")]
+pub use burn::burn_geo_traits;
 pub use burn::{burn, burn_window, burn_wkb, BurnMode, BurnOptions};
 pub use coalesce::coalesce_runs;
 pub use crop::crop;
 pub use error::{BurnError, WkbError};
-pub use geometry::{is_ccw, signed_area, Coord, CoordSeq, Geometry, Polygon};
+pub use geometry::{is_ccw, signed_area, Coord, CoordSeq, Geometry, GeometryCollectionError, Polygon};
 pub use grid::GridSpec;
 pub use materialize::{materialize, EdgePolicy, MaterializeOptions, PixelFn};
 pub use merge::merge_cells;

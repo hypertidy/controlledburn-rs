@@ -8,17 +8,7 @@
 
 use crate::geometry::{Coord, CoordSeq, Geometry, Polygon};
 
-/// A `geo_types::Geometry` that cannot be represented: a collection.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GeometryCollectionError;
-
-impl std::fmt::Display for GeometryCollectionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "GeometryCollection is not supported; split into homogeneous groups")
-    }
-}
-
-impl std::error::Error for GeometryCollectionError {}
+pub use crate::geometry::GeometryCollectionError;
 
 #[inline]
 fn coord(c: geo_types::Coord<f64>) -> Coord {

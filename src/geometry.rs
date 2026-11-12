@@ -187,3 +187,16 @@ mod tests {
         assert_eq!(signed_area(&ccw[..2]), 0.0);
     }
 }
+
+/// A geometry that cannot be represented: a collection (from the
+/// `geo-types` or `geo-traits` conversions).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GeometryCollectionError;
+
+impl std::fmt::Display for GeometryCollectionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "GeometryCollection is not supported; split into homogeneous groups")
+    }
+}
+
+impl std::error::Error for GeometryCollectionError {}

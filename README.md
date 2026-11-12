@@ -108,6 +108,12 @@ the whole result on every call, so don't loop it over a tile grid.
 
 - `serde`: `Serialize`/`Deserialize` on the public types.
 - `geo-types`: `From`/`TryFrom` conversions from `geo_types` geometries.
+- `geo-traits`: input from anything that implements
+  [`geo-traits`](https://docs.rs/geo-traits)' `GeometryTrait`, such as
+  geo-types, the `wkb` crate's zero-copy reader or GeoArrow arrays:
+  `burn_geo_traits(geoms, &grid, opts)` and `Geometry::from_geo_traits`.
+  The output is the same as converting first. Needs Rust 1.75 (the crate
+  otherwise builds on 1.70).
 
 ## Differences from the C++ core
 

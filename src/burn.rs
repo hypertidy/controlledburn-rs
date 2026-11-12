@@ -561,3 +561,45 @@ pub fn burn_window(
     }
     Ok(out)
 }
+
+/// Burn a sequence of [`geo-traits`](https://docs.rs/geo-traits)
+/// geometries (feature `geo-traits`): geo-types, the `wkb` crate's reader,
+/// GeoArrow arrays, or anything else that implements `GeometryTrait`.
+/// Geometry `k` (its 0-based position) is `id = k + opts.id_offset`, as
+/// in [`burn`].
+///
+/// Each geometry is copied with
+/// [`Geometry::from_geo_traits`](crate::Geometry::from_geo_traits) and
+/// burned as [`burn`] burns it, so the output is the same as converting
+/// first. A `GeometryCollection` is skipped with a note.
+///
+/// ```
+/// use controlledburn::{burn_geo_traits, BurnOptions, GridSpec};
+///
+/// let ring = vec![(2.5, 4.5), (6.5, 4.5), (6.5, 8.5), (2.5, 8.5)];
+/// let square = geo_types::Polygon::new(ring.into(), vec![]);
+/// let grid = GridSpec::new(0.0, 0.0, 10.0, 10.0, 10, 10);
+/// let r = burn_geo_traits([&square], &grid, BurnOptions::default()).unwrap();
+/// assert!((r.covered_cells() - 16.0).abs() < 1e-5);
+/// ```
+#[cfg(feature = "geo-traits")]
+pub fn burn_geo_traits<I, G>(geoms: I, grid: &GridSpec, opts: impl Into<BurnOptions>) -> Result<BurnResult, BurnError>
+where
+    I: IntoIterator<Item = G>,
+    G: geo_traits::GeometryTrait<T = f64>,
+{
+    grid.validate()?;
+    let opts = opts.into();
+    opts.validate()?;
+    let full_grid = grid.bounded();
+    let mut out = BurnResult::default();
+    let mut sc = CoverageScratch::default();
+    for (k, g) in geoms.into_iter().enumerate() {
+        let id = opts.id(k)?;
+        match Geometry::from_geo_traits(&g) {
+            Ok(g) => burn_one(&g, id, &full_grid, grid, &mut out, &opts, &mut sc, None),
+            Err(e) => out.note(id, format!("skipped geometry: {e}")),
+        }
+    }
+    Ok(out)
+}

@@ -26,10 +26,13 @@ exclude = [
 default = []
 serde = ["dep:serde"]
 geo-types = ["dep:geo-types"]
+# needs Rust 1.75 (geo-traits uses impl Trait in traits)
+geo-traits = ["dep:geo-traits"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }
 geo-types = { version = "0.7", optional = true }
+geo-traits = { version = "0.3", optional = true, default-features = false }
 
 [package.metadata.docs.rs]
 all-features = true
@@ -42,6 +45,10 @@ proptest = "1"
 plotters = { version = "0.3", default-features = false, features = ["bitmap_backend", "bitmap_encoder"] }
 criterion = { version = "0.5", default-features = false }
 geo = "0.31"
+geo-types = "0.7"
+geo-traits = { version = "0.3", features = ["geo-types"] }
+# a zero-copy geo-traits reader, to check burn_geo_traits against burn_wkb
+wkb = "0.9"
 
 [[bench]]
 name = "burn"
