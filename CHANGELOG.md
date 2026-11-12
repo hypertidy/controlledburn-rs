@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **`burn_par`: `burn` on several threads** (std only, `0` for all
+  available), with the same result record for record, notes included.
+  The geometries are split into contiguous chunks of about equal
+  estimated work (coordinates plus the grid rows each spans, the rows
+  from at most 16 coordinates a part), 16 per thread; threads take the
+  costliest chunk left, each with its own scratch buffers, and the
+  chunks' tables are put together in order with exact reservations. It
+  uses at most one thread per 8,192 of that work, and burns on the
+  calling thread with one thread or one geometry. Against the cb-compare
+  harness's rayon split (vertex-balanced groups, concatenation without
+  reservation) on the dev VM: rock-32m coverage 0.66-0.79x its time at 8
+  and 32 threads, approx 0.49-0.87x, small-1e5 0.91-0.97x; burns under
+  about 10 ms at 32 threads (rects, rock-1024m, rock-256m approx) are
+  1.3-2.4x slower, as the threads are started on each call. The serial
+  concatenation is now the largest cost at 32 threads on 4 KB pages; a
+  parallel copy (0.11 to 0.01 s on rock-32m) needs unsafe code, which
+  the crate forbids.
 - **The walker keeps a ring's traversals in one array**, linked per cell,
   instead of a vector per cell, and a traversal is 16 bytes, not 24. A
   detailed ring revisits its cells many times (coast-1e6: 111 M

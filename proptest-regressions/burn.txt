@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 0ded1c440c6c7c1a9ba8831d8271cd79aa6875d74ef7d7c67f86d3da4f6cc209 # shrinks to centres = [(0.0, 0.0, 0.3, 0)], wobble = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], threads = 2, approx = false, coalesce = false, merge = false, id_offset = 0
