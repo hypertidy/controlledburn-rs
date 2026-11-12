@@ -82,7 +82,10 @@ at 8-32 threads. It uses at most one thread per 131,072 records, so a
 small output is sliced on the calling thread, where starting threads would
 cost more than they save. Its parallelism is by band of tile rows, so a
 grid only a few tiles tall gains little, and on 2 threads it is about
-even. For a single window, or tile extents that
+even. Its peak memory depends on the allocator: with glibc's default
+per-thread arenas it was up to 1.7x the serial slice's after a parallel
+burn, and about the serial slice's plus one band index entry per record
+with `MALLOC_ARENA_MAX=1` (`design/slice-after-burn.md`). For a single window, or tile extents that
 are not a regular grid, use `crop`. It returns the same tables but scans
 the whole result on every call, so don't loop it over a tile grid.
 
