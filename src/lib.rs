@@ -39,6 +39,15 @@
 //! Invariant (Coverage mode): `cell_area * (run cells + sum of edge
 //! fractions)` equals the exact polygon area inside the grid.
 //!
+//! A cell in no record is 0. Two geometries can each have a record in the
+//! same cell (a shared border), but one geometry never has two (with
+//! `merge_parts` on, the default). Each table
+//! is grouped by id in input order and, within an id, in row-major order
+//! (points in the order the geometry lists them); [`BurnResult`] has the
+//! rules, and the book's
+//! [contract chapter](https://hypertidy.github.io/controlledburn-rs/contract.html)
+//! draws the tables for two polygons.
+//!
 //! ## Modes
 //!
 //! * [`BurnMode::Coverage`] (default): exact fractions via analytical

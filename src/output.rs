@@ -70,6 +70,30 @@ pub struct Note {
 }
 
 /// The result of a burn.
+///
+/// # Reading the tables
+///
+/// - A cell that is in no record is 0 for every id: nothing of any
+///   geometry falls in it.
+/// - For one id a cell has at most one record: a run or an edge (or a
+///   line, or points). Across ids a cell can have one record for each, so
+///   two polygons that share a border both have an edge in the cells it
+///   crosses, with fractions that add up to 1 where they tile the cell.
+/// - Each table is grouped by `id`, in input order. Within an id, `runs`,
+///   `edges` and `lines` are in row-major order: by `row`, then by column
+///   (`col_start` for a run). `points` are in the order the geometry
+///   lists them, one record per point, so a cell repeats when two points
+///   fall in it.
+/// - With [`BurnOptions::merge_parts`](crate::BurnOptions::merge_parts)
+///   off (and so with `BurnOptions::parity`), a multi-part geometry has
+///   records for each part in turn, each part in row-major order, and a
+///   cell two parts cross has a record from each.
+///
+/// The order holds for every burn function, and [`crop`](crate::crop),
+/// [`slice_tiles`](crate::slice_tiles) and
+/// [`slice_tiles_par`](crate::slice_tiles_par) keep it. Results put
+/// together afterwards (concatenated, or folded by a front end) get it
+/// back from [`merge_cells`](crate::merge_cells).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct BurnResult {

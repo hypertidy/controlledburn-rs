@@ -26,7 +26,7 @@ code.
 
 | chapter | what it shows |
 |---|---|
-| [The contract](contract.md) | one polygon, one grid, the four tables, the invariant |
+| [The contract](contract.md) | what a burn produces for two polygons, how to read the tables, and one square checked by hand |
 | [Grids beyond the lattice](grids.md) | rotated, rectilinear and curvilinear grids, burned in index space |
 | [Sparse versus dense](sparse-vs-dense.md) | the world at 1, 0.1 and 0.01 degrees: table sizes against dense array sizes |
 | [Coverage versus approx](coverage-vs-approx.md) | exact fractions against the cell-centre rule |
