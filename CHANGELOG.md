@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.3.3 (2026-11-19)
+
+Adds first moments to `CoverageWindow` (`set_moments`, `moment_x`,
+`moment_y`): each cell's covered centroid, planar and on the sphere, for
+second-order conservative remapping in rwarp. Coverage is bit for bit as
+before with moments on or off, and burns give the same records as 0.3.2.
+The order of a burn's records is now part of the documented contract
+(what every burn already gave), and the book opens its contract chapter
+with a figure of what a burn produces.
 
 - **The order of the records is part of the contract.** Each table is
   grouped by id in input order; within an id, runs, edges and lines are
