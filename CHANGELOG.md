@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **The order of the records is part of the contract.** Each table is
+  grouped by id in input order; within an id, runs, edges and lines are
+  in row-major order (row, then column), and points in the order the
+  geometry lists them. This is what every burn function already gave;
+  `crop`, `slice_tiles` and `slice_tiles_par` keep it, and `merge_cells`
+  leaves a default burn unchanged. With `merge_parts` off (parity mode)
+  it holds per part. `BurnResult`'s documentation states the rules for
+  reading the tables (a cell in no record is 0; one record per cell per
+  id; a cell can have a record for each of several ids), and
+  `tests/order.rs` checks them over every entry point.
+- **Book and README: what a burn produces.** A new figure draws the
+  tables for two polygons beside the grid, with one row decoded per
+  polygon, and the contract chapter now opens with it, the rules for
+  reading the tables, and a tested decoding loop, before the square
+  worked by hand.
 - **`CoverageWindow` gives each cell's first moments.** With
   `set_moments(true)` the window books, beside coverage, each cell's
   first moments about its own corner, and `moment_x` and `moment_y` give

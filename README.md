@@ -39,10 +39,18 @@ let r = burn(&[square], &grid, BurnOptions::default()).unwrap();
 assert!((r.covered_cells() * grid.dx() * grid.dy() - 16.0).abs() < 1e-5);
 ```
 
+![Two polygons on a 10 x 6 grid, the runs and edges tables they give, and one row decoded per polygon](https://hypertidy.github.io/controlledburn-rs/img/format.svg)
+
 Indices are 0-based with row 0 at the top, run ranges are half-open,
 and geometry `k` in the input has `id = k` (`id_offset + k` with
-`BurnOptions::with_id_offset`). A multi-part geometry has one record per
-cell: parts crossing the same cell are summed.
+`BurnOptions::with_id_offset`). A cell in no record is 0. A geometry
+has at most one record per cell (the parts of a multi-part geometry
+that cross a cell are summed), but two geometries can each have one in
+the same cell, as on a shared border. Each table is grouped by id in
+input order, and in row-major order within an id; points are in the
+order the geometry lists them. The book's
+[contract chapter](https://hypertidy.github.io/controlledburn-rs/contract.html)
+walks through the figure.
 
 ## What is in the crate
 

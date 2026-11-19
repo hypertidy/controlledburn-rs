@@ -25,10 +25,12 @@ const TOL: f32 = 1e-6;
 /// This is for records that come together after the burn, such as a
 /// front end that burns in an unwrapped index space and folds columns
 /// or rows back (a periodic or tripolar grid), where two pieces of one
-/// geometry can land in the same cell. For a single burn with
-/// `merge_parts` on (the default) it changes nothing but the order.
+/// geometry can land in the same cell. A single burn with `merge_parts`
+/// and `coalesce_runs` on (the defaults) is already merged and in this
+/// order, and it changes nothing.
 ///
-/// The tables come out sorted by `(id, row, col)` (runs by `col_start`).
+/// The tables come out sorted by `(id, row, col)` (runs by `col_start`),
+/// the order of a burn ([`BurnResult`](crate::BurnResult)).
 ///
 /// ```
 /// use controlledburn::{merge_cells, BurnResult, GridEdge};
