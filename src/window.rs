@@ -60,6 +60,28 @@
 //! [`Measure::ring_area`] gives a ring's measure. The planar measure is the
 //! default and its arithmetic is unchanged.
 //!
+//! # First moments
+//!
+//! The same split gives each cell's first moments, for the centroid of the
+//! part of a ring inside it (second-order conservative remapping centres
+//! a cell's gradient term there). With the area element `dA` (or
+//! `w(y) dx dy` under a measure), the moments about the cell's own corner
+//! `(i, j)` are, by Green's theorem, sums over the same pieces:
+//!
+//! ```text
+//! int (x - i) dA = sum over pieces in (i, j) of int ((x - i)^2 - 1) / 2 dy
+//!                - 1/2 sum over pieces in row j left of column i of int dy
+//! int (y - j) dA = sum over pieces in (i, j) of int (x - (i + 1)) (y - j) dy
+//!                - sum over pieces in row j left of column i of int (y - j) dy
+//! ```
+//!
+//! (each integrand weighted by `w(y)` under a measure). The first prefix is
+//! the one coverage already uses; the second is booked beside it.
+//! [`CoverageWindow::set_moments`] turns this on, and
+//! [`CoverageWindow::moment_x`] and [`CoverageWindow::moment_y`] give the
+//! moments over the cell's measure, so the covered part's centroid is
+//! `(i + moment_x / coverage, j + moment_y / coverage)`.
+//!
 //! C++ port note: both are header-only candidates for the C++
 //! controlledburn (no dependencies, plain loops over `double`); the piece
 //! walk below ports line for line.
@@ -101,6 +123,23 @@ fn sin_minus_zcos_over_z3(z: f64) -> f64 {
     }
 }
 
+/// `int_0^1 t^2 cos(z t) dt = sin z / z + 2 cos z / z^2 - 2 sin z / z^3`,
+/// by its series for small `z`.
+#[inline]
+fn t2_cos(z: f64) -> f64 {
+    let z2 = z * z;
+    if z.abs() < 0.5 {
+        // sum of (-1)^n z^2n / ((2n)! (2n + 3)), to the term in z^12: the
+        // next is below 1e-16 at the switch
+        1.0 / 3.0
+            - z2 * (1.0 / 10.0
+                - z2 * (1.0 / 168.0
+                    - z2 * (1.0 / 6480.0 - z2 * (1.0 / 443520.0 - z2 * (1.0 / 47174400.0 - z2 / 7185024000.0)))))
+    } else {
+        z.sin() / z + 2.0 * z.cos() / z2 - 2.0 * z.sin() / (z2 * z)
+    }
+}
+
 impl Measure {
     /// The sphere for rows of latitude `phi0 + dphi * y` (radians).
     pub fn cos_latitude(phi0: f64, dphi: f64) -> Self {
@@ -126,6 +165,37 @@ impl Measure {
                 (cover, xm * cover + (dx / dy) * first)
             }
         }
+    }
+
+    /// For one straight piece with midpoint `(xl + i, yl + j)` in cell `(i,
+    /// j)` and extent `(dx, dy)` (`ym` the midpoint's absolute `y`): the
+    /// integrals along it of `((x - i)^2 - 1) w / 2`, `(x - (i + 1)) (y - j)
+    /// w` and `(y - j) w` against `dy`.
+    #[inline]
+    fn piece_moments(&self, xl: f64, yl: f64, ym: f64, dx: f64, dy: f64) -> [f64; 3] {
+        // With u = y - ym over [-h, h], h = dy / 2, and x = xm + s u: the
+        // integrals of w, u w and u^2 w against du.
+        let (i0, i1, i2) = match *self {
+            Measure::Planar => (dy, 0.0, dy * dy * dy / 12.0),
+            Measure::CosLatitude { phi0, dphi } => {
+                let phim = phi0 + dphi * ym;
+                let h = 0.5 * dy;
+                let z = dphi * h;
+                let (s, c) = (phim.sin(), phim.cos());
+                (
+                    c * dy * sinc(z),
+                    -s * 2.0 * dphi * h * h * h * sin_minus_zcos_over_z3(z),
+                    c * 2.0 * h * h * h * t2_cos(z),
+                )
+            }
+        };
+        let s = dx / dy;
+        let x1 = xl - 1.0;
+        [
+            0.5 * ((xl * xl - 1.0) * i0 + 2.0 * xl * s * i1 + s * s * i2),
+            x1 * yl * i0 + (x1 + s * yl) * i1 + s * i2,
+            yl * i0 + i1,
+        ]
     }
 
     /// The measure of a cell in row `row` (`y` in `[row, row + 1]`): 1 for
@@ -306,6 +376,12 @@ pub struct CoverageWindow {
     area: Vec<f64>,
     cover: Vec<f64>,
     measure: Measure,
+    /// Whether first moments are booked ([`CoverageWindow::set_moments`]).
+    moments: bool,
+    /// The moments' cell terms, and the `y` moment's row prefix term.
+    mx: Vec<f64>,
+    my: Vec<f64>,
+    ycover: Vec<f64>,
 }
 
 impl CoverageWindow {
@@ -325,6 +401,19 @@ impl CoverageWindow {
         self.measure
     }
 
+    /// Also book and resolve each cell's first moments
+    /// ([`moment_x`](Self::moment_x), [`moment_y`](Self::moment_y)); off by
+    /// default. It stays across [`reset`](Self::reset) and takes effect at
+    /// the next one. Coverage is the same either way, bit for bit.
+    pub fn set_moments(&mut self, on: bool) {
+        self.moments = on;
+    }
+
+    /// Whether first moments are on ([`set_moments`](Self::set_moments)).
+    pub fn moments(&self) -> bool {
+        self.moments
+    }
+
     /// Clear the window and place it over columns `col0..col0 + ncol` and
     /// rows `row0..row0 + nrow`. Reuses the buffers.
     pub fn reset(&mut self, col0: i64, row0: i64, ncol: usize, nrow: usize) {
@@ -337,6 +426,11 @@ impl CoverageWindow {
         self.area.resize(n, 0.0);
         self.cover.clear();
         self.cover.resize(n, 0.0);
+        let m = if self.moments { n } else { 0 };
+        for v in [&mut self.mx, &mut self.my, &mut self.ycover] {
+            v.clear();
+            v.resize(m, 0.0);
+        }
     }
 
     /// Clear the window and place it over every cell the ring's bounding
@@ -398,6 +492,15 @@ impl CoverageWindow {
         let i = (self.col0 + li) as f64;
         let x = xm.clamp(i, i + 1.0);
         let k = lj as usize * self.ncol + li as usize;
+        if self.moments {
+            // beside the coverage terms below, which stay as they are
+            let dxm = if x == xm { dx } else { 0.0 };
+            let j = (self.row0 + lj) as f64;
+            let [mx, my, ycover] = self.measure.piece_moments(x - i, ym - j, ym, dxm, dy);
+            self.mx[k] += w * mx;
+            self.my[k] += w * my;
+            self.ycover[k] += w * ycover;
+        }
         if let Measure::Planar = self.measure {
             let dy = w * dy;
             self.area[k] += (x - (i + 1.0)) * dy;
@@ -446,10 +549,25 @@ impl CoverageWindow {
                 *a -= acc;
                 acc += *c;
             }
+            if self.moments {
+                let (mut acc, mut yacc) = (0.0, 0.0);
+                for k in row.clone() {
+                    self.mx[k] -= 0.5 * acc;
+                    self.my[k] -= yacc;
+                    acc += self.cover[k];
+                    yacc += self.ycover[k];
+                }
+            }
             if !matches!(self.measure, Measure::Planar) {
                 let cell = self.measure.cell_area(self.row0 + j as i64);
-                for a in &mut self.area[row] {
+                for a in &mut self.area[row.clone()] {
                     *a /= cell;
+                }
+                if self.moments {
+                    for k in row {
+                        self.mx[k] /= cell;
+                        self.my[k] /= cell;
+                    }
                 }
             }
         }
@@ -459,6 +577,24 @@ impl CoverageWindow {
     /// The resolved coverage (after [`resolve`](Self::resolve)).
     pub fn coverage(&self) -> &[f64] {
         &self.area
+    }
+
+    /// Each cell's first moment in `x` about its own left wall: the
+    /// integral of `x - i` over the covered part of cell `(i, j)`, over the
+    /// cell's measure, row-major like [`coverage`](Self::coverage) (after
+    /// [`resolve`](Self::resolve)). The covered part's centroid is at `x =
+    /// i + moment_x / coverage`. Empty unless moments are on
+    /// ([`set_moments`](Self::set_moments)).
+    pub fn moment_x(&self) -> &[f64] {
+        &self.mx
+    }
+
+    /// Each cell's first moment in `y` about its own top wall: the integral
+    /// of `y - j` over the covered part of cell `(i, j)`, over the cell's
+    /// measure, as [`moment_x`](Self::moment_x). The centroid is at `y = j +
+    /// moment_y / coverage`.
+    pub fn moment_y(&self) -> &[f64] {
+        &self.my
     }
 }
 
@@ -577,5 +713,29 @@ impl<const K: usize> RowPrefix<K> {
             }
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn t2_cos_series_meets_the_closed_form() {
+        // either side of the switch at 0.5, and against quadrature
+        for z in [0.4999999, 0.5, 0.25, 1.3, -0.7] {
+            let n = 200_000;
+            let q: f64 = (0..n)
+                .map(|k| {
+                    let t = (k as f64 + 0.5) / n as f64;
+                    t * t * (z * t).cos()
+                })
+                .sum::<f64>()
+                / n as f64;
+            assert!((t2_cos(z) - q).abs() < 1e-11, "{z}: {} vs {q}", t2_cos(z));
+        }
+        let below = f64::from_bits(0.5f64.to_bits() - 1);
+        let (a, b) = (t2_cos(below), t2_cos(0.5));
+        assert!((a - b).abs() < 1e-15, "{a} vs {b}");
     }
 }

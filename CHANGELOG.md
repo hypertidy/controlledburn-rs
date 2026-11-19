@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- **`CoverageWindow` gives each cell's first moments.** With
+  `set_moments(true)` the window books, beside coverage, each cell's
+  first moments about its own corner, and `moment_x` and `moment_y` give
+  them over the cell's measure. The covered part's centroid is then
+  `(i + moment_x / coverage, j + moment_y / coverage)`. It works for the
+  planar measure and for `Measure::CosLatitude`, from the same split of
+  each edge at the cell walls (with one more row prefix), and coverage
+  is bit for bit what it was, moments on or off. This is for second-order
+  conservative remapping in rwarp (its #40), which centres each source
+  cell's gradient term on the overlap's centroid. `tests/moments.rs`
+  checks it against each cell's clip of the ring: the polygon formulas
+  for the planar measure, and Green's theorem with Gauss-Legendre
+  quadrature for the sphere.
 - **Book, "Predicates per cell": one of the six "run cells a country does
   not cover" is invalid input, not a sliver.** Natural Earth's Sudan ring
   crosses itself (a spike south to 8.68°N that returns about 2e-7 degrees
