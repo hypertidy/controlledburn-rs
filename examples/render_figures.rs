@@ -329,6 +329,212 @@ fn contract() {
     svg.save("contract.svg");
 }
 
+/// The two polygons of the format figure, as in the contract chapter: id 0
+/// with a hole, and id 1 sharing its slanted side.
+fn two_polygons() -> [Geometry; 2] {
+    let ring = |v: &[(f64, f64)]| v.iter().map(|&(x, y)| Coord::new(x, y)).collect::<Vec<_>>();
+    [
+        Geometry::Polygon(Polygon::new(vec![
+            ring(&[(0.6, 0.7), (5.3, 0.7), (7.4, 5.3), (0.6, 5.3), (0.6, 0.7)]),
+            ring(&[(2.4, 2.4), (2.4, 3.6), (4.6, 3.6), (4.6, 2.4), (2.4, 2.4)]),
+        ])),
+        Geometry::Polygon(Polygon::new(vec![ring(&[(5.3, 0.7), (9.4, 0.7), (9.4, 5.3), (7.4, 5.3), (5.3, 0.7)])])),
+    ]
+}
+
+/// What a burn produces: two polygons on a grid, the runs and edges
+/// tables beside it, and one row decoded per id.
+fn format_figure() {
+    const ID1: (u8, u8, u8) = (42, 120, 214);
+    const HIGHLIGHT: &str = "#f3efe2";
+    let hue = |id: i32| if id == 0 { COVER } else { ID1 };
+    let grid = GridSpec::new(0.0, 0.0, 10.0, 6.0, 10, 6);
+    let geoms = two_polygons();
+    let r = burn(&geoms, &grid, BurnOptions::default()).unwrap();
+    let row = 2;
+
+    let s = 36.0;
+    let p = Panel { x0: 40.0, y0: 78.0, s, grid };
+    let tx = p.x0 + p.w() + 60.0; // the tables' left edge
+    let lh = 19.0; // table line height
+    let mut svg = Svg::new(tx + 300.0, 1000.0); // cut to the content at the end
+
+    // Every record of a cell side by side, as wide as its fraction, so the
+    // shared cells show both ids.
+    let mut cells: std::collections::BTreeMap<(i32, i32), Vec<(i32, f64)>> = Default::default();
+    for run in &r.runs {
+        for c in run.col_start..run.col_end {
+            cells.entry((run.row, c)).or_default().push((run.id, 1.0));
+        }
+    }
+    for e in &r.edges {
+        cells.entry((e.row, e.col)).or_default().push((e.id, e.fraction as f64));
+    }
+    let shade = |id: i32, f: f64| mix(hue(id), 0.25 + 0.75 * f);
+    for (&(rr, cc), recs) in &cells {
+        let (x, y) = p.cell(rr, cc);
+        let total: f64 = recs.iter().map(|r| r.1).sum();
+        let mut at = x;
+        for &(id, f) in recs {
+            let w = if recs.len() == 1 { s } else { s * f / total };
+            svg.rect(at, y, w, s, &shade(id, f));
+            at += w;
+        }
+    }
+    p.lines(&mut svg, GRID, 1.0);
+    for g in &geoms {
+        p.geometry(&mut svg, g, "none", INK, 1.6);
+    }
+    p.frame(&mut svg);
+    for c in 0..grid.ncol {
+        svg.text(p.x0 + (c as f64 + 0.5) * s, p.y0 - 8.0, &c.to_string(), 11.0, "middle", MUTED);
+    }
+    for rr in 0..grid.nrow {
+        svg.text(p.x0 - 8.0, p.y0 + (rr as f64 + 0.5) * s + 4.0, &rr.to_string(), 11.0, "end", MUTED);
+    }
+    svg.text(p.x0 + p.w() / 2.0, p.y0 + p.h() + 18.0, "col", 11.0, "middle", MUTED);
+    svg.text(p.x0 - 8.0, p.y0 - 8.0, "row", 11.0, "end", MUTED);
+    let (_, ry) = p.cell(row, 0);
+    svg.outline([p.x0 - 3.0, ry - 3.0, p.w() + 6.0, s + 6.0], INK, 1.5, true);
+    svg.text(p.x0, 22.0, "two polygons on a 10 × 6 grid", 15.0, "start", INK);
+    for (i, label) in ["id 0, with a hole", "id 1, sharing its slanted side"].iter().enumerate() {
+        let x = p.x0 + i as f64 * 140.0;
+        svg.rect(x, 33.0, 10.0, 10.0, &mix(hue(i as i32), 0.8));
+        svg.text(x + 15.0, 42.0, label, 12.0, "start", INK);
+    }
+
+    // Row 2 decoded: one dense row per id, 0 where there is no record.
+    let dy0 = p.y0 + p.h() + 66.0;
+    svg.text(p.x0, dy0 - 14.0, &format!("row {row} decoded, one dense row per id"), 14.0, "start", INK);
+    for id in 0..2 {
+        let y = dy0 + id as f64 * (s + 10.0);
+        let mut v = vec![0.0f64; grid.ncol as usize];
+        for run in r.runs.iter().filter(|x| x.row == row && x.id == id) {
+            v[run.col_start as usize..run.col_end as usize].iter_mut().for_each(|x| *x = 1.0);
+        }
+        for e in r.edges.iter().filter(|e| e.row == row && e.id == id) {
+            v[e.col as usize] = e.fraction as f64;
+        }
+        for (c, &f) in v.iter().enumerate() {
+            let x = p.x0 + c as f64 * s;
+            svg.rect(x, y, s, s, &if f > 0.0 { shade(id, f) } else { "#ffffff".to_string() });
+            svg.outline([x, y, s, s], GRID, 1.0, false);
+            let label = if f == 1.0 {
+                "1".to_string()
+            } else if f == 0.0 {
+                "0".to_string()
+            } else {
+                format!("{f:.2}")
+            };
+            svg.text(x + s / 2.0, y + s / 2.0 + 4.0, &label, 11.0, "middle", if f == 0.0 { MUTED } else { INK });
+        }
+        for run in r.runs.iter().filter(|x| x.row == row && x.id == id) {
+            let x = p.x0 + run.col_start as f64 * s;
+            svg.outline([x + 1.0, y + 1.0, (run.col_end - run.col_start) as f64 * s - 2.0, s - 2.0], INK, 2.0, false);
+        }
+        svg.text(p.x0 - 8.0, y + s / 2.0 + 4.0, &format!("id {id}"), 11.0, "end", INK);
+    }
+    let shared: Vec<f32> = r.edges.iter().filter(|e| e.row == row && e.col == 6).map(|e| e.fraction).collect();
+    let left_bottom = dy0 + 2.0 * s + 10.0 + 24.0;
+    svg.text(p.x0, left_bottom, "outlined: a run record; any other value: an edge record", 12.0, "start", INK);
+    let left_bottom = left_bottom + 18.0;
+    let note = format!("col 6 is in both polygons: {:.2} + {:.2} = 1, one record each", shared[0], shared[1]);
+    svg.text(p.x0, left_bottom, &note, 12.0, "start", INK);
+
+    // A table: right-aligned columns, a chip in the id's colour, the
+    // records on `row` on a highlight. `None` is a gap with its count.
+    let table = |svg: &mut Svg,
+                 y0: f64,
+                 title: &str,
+                 head: &[&str],
+                 rows: &[Option<(i32, i32, Vec<String>)>],
+                 gaps: &[usize]| {
+        let cols: Vec<f64> = (0..head.len()).map(|i| tx + 70.0 + 62.0 * i as f64).collect();
+        svg.text(tx, y0, title, 14.0, "start", INK);
+        let mut y = y0 + 24.0;
+        for (h, &x) in head.iter().zip(&cols) {
+            svg.text(x, y, h, 11.0, "end", MUTED);
+        }
+        svg.line(tx, y + 5.0, cols[cols.len() - 1] + 4.0, y + 5.0, GRID, 1.0);
+        let mut g = gaps.iter();
+        for rec in rows {
+            y += lh;
+            match rec {
+                Some((rr, id, vals)) => {
+                    if *rr == row {
+                        svg.rect(tx, y - lh + 5.0, cols[cols.len() - 1] + 4.0 - tx, lh, HIGHLIGHT);
+                    }
+                    svg.rect(tx + 4.0, y - 10.0, 10.0, 10.0, &mix(hue(*id), 0.8));
+                    for (v, &x) in vals.iter().zip(&cols) {
+                        svg.text(x, y, v, 12.0, "end", INK);
+                    }
+                }
+                None => {
+                    let n = g.next().copied().unwrap_or(0);
+                    svg.text(cols[0], y, "⋮", 12.0, "end", MUTED);
+                    svg.text(cols[0] + 14.0, y, &format!("{n} more"), 11.0, "start", MUTED);
+                }
+            }
+        }
+        y
+    };
+
+    let runs: Vec<_> = r
+        .runs
+        .iter()
+        .map(|x| {
+            Some((
+                x.row,
+                x.id,
+                vec![x.row.to_string(), x.col_start.to_string(), x.col_end.to_string(), x.id.to_string()],
+            ))
+        })
+        .collect();
+    let y = table(
+        &mut svg,
+        24.0,
+        &format!("runs: all {} records", r.runs.len()),
+        &["row", "col_start", "col_end", "id"],
+        &runs,
+        &[],
+    );
+
+    // Edges on `row`, with the records between them counted.
+    let mut rows = Vec::new();
+    let mut gaps = Vec::new();
+    let mut skipped = 0;
+    for e in &r.edges {
+        if e.row == row {
+            if skipped > 0 {
+                rows.push(None);
+                gaps.push(skipped);
+                skipped = 0;
+            }
+            rows.push(Some((
+                e.row,
+                e.id,
+                vec![e.row.to_string(), e.col.to_string(), format!("{:.2}", e.fraction), e.id.to_string()],
+            )));
+        } else {
+            skipped += 1;
+        }
+    }
+    if skipped > 0 {
+        rows.push(None);
+        gaps.push(skipped);
+    }
+    let bottom = table(
+        &mut svg,
+        y + 44.0,
+        &format!("edges: {} records, row {row} shown", r.edges.len()),
+        &["row", "col", "fraction", "id"],
+        &rows,
+        &gaps,
+    );
+    svg.h = bottom.max(left_bottom) + 16.0;
+    svg.save("format.svg");
+}
+
 /// Coverage and approx on a coastline, and where they differ.
 fn coverage_vs_approx(blobs: &[Vec<u8>]) {
     // Britain and Ireland at a quarter degree.
@@ -700,6 +906,7 @@ fn relate_figure() {
 fn main() {
     std::fs::create_dir_all(OUT).unwrap();
     let blobs = countries();
+    format_figure();
     contract();
     coverage_vs_approx(&blobs);
     lines_and_points();
